@@ -17,9 +17,9 @@ class Settings(BaseSettings):
     )
 
     # Agent code must only ever use the read-only URL.
-    database_url_ro: str = Field(..., alias="DATABASE_URL_RO")
+    database_url_ro: SecretStr = Field(..., alias="DATABASE_URL_RO")
     # Admin URL is for database/seed.py only.
-    database_url_admin: str | None = Field(None, alias="DATABASE_URL_ADMIN")
+    database_url_admin: SecretStr | None = Field(None, alias="DATABASE_URL_ADMIN")
 
     # LLM provider: OpenRouter (OpenAI-compatible).
     openrouter_api_key: SecretStr | None = Field(None, alias="OPENROUTER_API_KEY")
@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     embed_cache_dir: Path = Field(PROJECT_ROOT / ".cache" / "fastembed", alias="EMBED_CACHE_DIR")
     max_sql_attempts: int = Field(3, ge=1, le=10, alias="MAX_SQL_ATTEMPTS")
     default_row_limit: int = Field(1000, ge=1, le=100_000, alias="DEFAULT_ROW_LIMIT")
+    # A LIMIT above this is clamped; the executor also never fetches more rows.
+    max_result_rows: int = Field(5000, ge=1, le=100_000, alias="MAX_RESULT_ROWS")
+    # EXPLAIN total-cost cap. Calibrated in Phase 3: the KPI reference queries in
+    # retrieval/docs/kpi_definitions.md cost 2.2k-14.7k; cartesian joins cost 0.5M-122M.
+    # Re-check against the eval gold queries (Phase 6).
+    max_query_cost: float = Field(100_000.0, gt=0, alias="MAX_QUERY_COST")
+    statement_timeout_ms: int = Field(15_000, ge=1, le=15_000, alias="STATEMENT_TIMEOUT_MS")
+    audit_log_path: Path = Field(PROJECT_ROOT / "logs" / "audit.jsonl", alias="AUDIT_LOG_PATH")
 
 
 @lru_cache

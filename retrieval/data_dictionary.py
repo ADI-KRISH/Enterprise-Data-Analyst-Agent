@@ -184,7 +184,7 @@ def main() -> None:
     from app.config import get_settings
     from database.seed import to_conninfo
 
-    with psycopg.connect(to_conninfo(get_settings().database_url_ro)) as conn:
+    with psycopg.connect(to_conninfo(get_settings().database_url_ro.get_secret_value())) as conn:
         conn.read_only = True
         data = introspect(conn)
     write(data)

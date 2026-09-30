@@ -89,7 +89,7 @@ def test_dictionary_in_sync_with_database():
     from retrieval.data_dictionary import introspect
 
     try:
-        conn = psycopg.connect(to_conninfo(get_settings().database_url_ro), connect_timeout=3)
+        conn = psycopg.connect(to_conninfo(get_settings().database_url_ro.get_secret_value()), connect_timeout=3)
     except Exception as e:  # noqa: BLE001 - DB is optional for this test
         pytest.skip(f"database not reachable: {type(e).__name__}")
     with conn:

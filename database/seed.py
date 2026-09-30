@@ -388,7 +388,7 @@ def main() -> int:
     t0 = time.perf_counter()
     data = generate()
     t1 = time.perf_counter()
-    load(data, url)
+    load(data, url.get_secret_value())
     t2 = time.perf_counter()
     for table, _ in TABLES:
         print(f"{table:<18} {len(data[table]):>8,}")
