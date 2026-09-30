@@ -1,0 +1,38 @@
+# Python 3.11. Pinned to major version (minor for 0.x / fast-moving libs).
+
+# Agent / LLM
+langgraph>=1.2,<2
+langchain>=1.4,<2
+langchain-core>=1.6,<2
+langchain-anthropic>=1.7,<2
+anthropic>=1.9,<2
+
+# Database
+sqlalchemy>=2.1,<3
+psycopg[binary]>=3.3,<4
+sqlglot>=30.20,<31
+
+# Analysis / viz
+pandas>=3.0,<4
+numpy>=2.4,<3
+plotly>=7.1,<8
+
+# Retrieval (local, no API key)
+chromadb>=1.5,<2
+fastembed>=0.8,<0.9
+
+# API / UI
+fastapi>=0.142,<0.143
+uvicorn[standard]>=0.54,<0.55
+streamlit>=1.64,<2
+httpx>=0.28,<0.29
+
+# Config / utils
+pydantic>=2.13,<3
+pydantic-settings>=2.15,<3
+python-dotenv>=1.2,<2
+pyyaml>=6.0,<7
+faker>=40.0,<41
+
+# Tests
+pytest>=9.1,<10

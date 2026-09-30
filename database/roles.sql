@@ -1,0 +1,1 @@
+-- analyst_ro read-only role. Implemented in Phase 1.

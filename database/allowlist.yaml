@@ -1,0 +1,3 @@
+# Allow-listed tables/columns in schema analytics. Populated in Phase 1.
+schema: analytics
+tables: {}
