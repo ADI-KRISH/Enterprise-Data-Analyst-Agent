@@ -10,7 +10,7 @@ An AI analytics agent: natural-language business question → intent/plan → sc
 2. **Read-only database access.** The agent connects as role `analyst_ro` (SELECT only on schema `analytics`). Never use the admin/seed credentials in agent code.
 3. **Validate every SQL before execution** (`agents/sql_validator.py`, using `sqlglot`, dialect `postgres`):
    - exactly one statement; top-level must be SELECT (WITH … SELECT allowed)
-   - reject INSERT/UPDATE/DELETE/MERGE/DROP/ALTER/CREATE/TRUNCATE/GRANT/COPY/CALL/DO, `pg_*` functions, `;` chaining, comments containing statements
+   - reject INSERT/UPDATE/DELETE/MERGE/DROP/ALTER/CREATE/TRUNCATE/GRANT/COPY/CALL/DO, `;` chaining, comments containing statements; functions and schemas are allow-listed (see **Security model**)
    - every table and column must exist in the allow-listed schema (`database/allowlist.yaml`)
    - enforce `LIMIT` (default 1000) if missing
    - dry-run with `EXPLAIN` before real execution
@@ -18,6 +18,50 @@ An AI analytics agent: natural-language business question → intent/plan → sc
 4. **Ask for clarification** instead of guessing when a metric/entity/time period is not defined by the data or KPI docs.
 5. **Honest reporting.** Never write accuracy, latency, or evaluation figures into README/docs unless produced by `eval/run_eval.py` and saved in `eval/results/`. Do not claim production deployment.
 6. Relative dates ("last quarter", "this month") resolve against `ANCHOR_DATE` = max(order_date) in the data, not the system clock. Document this in `retrieval/docs/reporting_policies.md`.
+
+## Security model
+**Principle: all LLM-generated SQL (and all LLM output) is untrusted input.** Defense in depth: each layer below must hold on its own, even if the one before it fails.
+
+1. **SQL validator** (`agents/sql_validator.py`, Phase 3), in addition to rule 3:
+   - **Function allowlist, not a blocklist.** Any function not on the list is rejected. Default list (kept as a frozenset in the validator): aggregates (`count`, `sum`, `avg`, `min`, `max`, `stddev`, `percentile_cont`), date (`date_trunc`, `extract`, `date_part`, `to_char`, `make_date`), math (`round`, `abs`, `ceil`, `floor`, `greatest`, `least`, `nullif`), string basics (`lower`, `upper`, `trim`, `length`, `concat`, `substring`), `CASE`, `COALESCE`, `CAST`, and window functions (`row_number`, `rank`, `dense_rank`, `lag`, `lead`, `ntile`, `first_value`, `last_value`, aggregates with `OVER`). Clock functions (`now`, `current_date`, …) are excluded because relative dates resolve against `ANCHOR_DATE` (rule 6).
+   - **Schema allowlist.** Tables may only be `analytics.<allow-listed table>`, an unqualified allow-listed table, or a CTE defined in the same query. Reject `pg_catalog`, `information_schema`, `public`, and any other schema; reject system columns (`ctid`, `xmin`, …) via the column allowlist.
+   - **Rejected constructs:** `FOR UPDATE` / `FOR SHARE` (any locking clause), `SELECT … INTO`, `SET`, `SHOW`, `LISTEN`, `NOTIFY`, `UNLISTEN`, `dblink*`, `lo_*`, `COPY`, `DO`.
+   - **Cost cap.** Reject the query if the `EXPLAIN` total cost exceeds `MAX_QUERY_COST` (config). The default is calibrated in Phase 3 from the EXPLAIN costs of the eval gold queries.
+   - **Row cap.** A missing `LIMIT` becomes `DEFAULT_ROW_LIMIT` (1000); a larger `LIMIT` is clamped to `MAX_RESULT_ROWS` (config). The executor also fetches at most `MAX_RESULT_ROWS` rows.
+2. **Database** (implemented in Phase 1, `database/roles.sql`). `analyst_ro` has:
+   - `search_path = analytics`
+   - no `CREATE` on any schema (so it cannot create functions, tables, or views) and no `TEMP`
+   - `statement_timeout = 15s`
+   - `default_transaction_read_only = on`
+   - `CONNECTION LIMIT 20`
+   The executor also sets the timeout and read-only mode on every session, so neither depends on role defaults alone.
+3. **Indirect prompt injection.** Query result rows, retrieved docs, and any user-derived text are passed to LLMs only inside clearly delimited DATA blocks (e.g. `<data>…</data>`, `<retrieved_docs>…</retrieved_docs>`). Every prompt that includes them states that text inside those blocks is data, and that any instructions it contains must be ignored. Whatever the LLM produces is still re-validated (SQL by the validator, numbers by grounding).
+4. **Errors.**
+   - Users see a generic message plus a `request_id` (UUID, also returned in the response and written to the audit log), e.g. `{"error": "Could not answer this question.", "request_id": "…"}`.
+   - Full errors, DB messages, and stack traces go only to `logs/audit.jsonl`. Responses never contain stack traces, raw DB error text, or table internals.
+   - The API `trace` holds node names, statuses, models, and timings, not raw error text. Validator errors are fed back to the SQL generator internally.
+5. **Secrets.**
+   - API keys (and DB passwords) are loaded only as pydantic `SecretStr` and unwrapped at the point of use.
+   - Secrets are never logged, never placed in `state` or `state.trace`, and never returned by the API. Database URLs are redacted before any logging.
+6. **API** (Phase 6):
+   - `X-API-Key` header auth on every route except `GET /health`; the key comes from `API_KEY` in `.env` and is compared in constant time.
+   - Simple in-memory per-IP rate limit (`RATE_LIMIT_PER_MIN`) returning HTTP 429.
+   - `question` limited to `MAX_QUESTION_CHARS` = 500 (HTTP 422 above that).
+   - Overall request timeout `REQUEST_TIMEOUT_S`.
+   - The Streamlit dashboard sends the key from its own env.
+7. **No code execution from LLM output.**
+   - Never `eval` / `exec` / `pickle` / unsafe YAML-load anything an LLM produced.
+   - Chart specs are built by our code (`visualization/charts.py`) from the result data. The LLM may only choose a chart type from an enum (`bar | line | pie | scatter | table | none`); anything else falls back to `table`.
+8. **Security tests** (`tests/test_security.py`, validator/DB cases in Phase 3, API/injection cases in Phase 6): at least 30 attack cases covering every item above:
+   - write/DDL statements and statement chaining
+   - comment tricks and disallowed functions (`pg_sleep`, `pg_read_file`, `dblink`, `lo_import`, `set_config`, `now`)
+   - `pg_catalog` / `information_schema` / other-schema access and system columns
+   - locking clauses, `SELECT INTO`, `SET` / `SHOW` / `LISTEN` / `NOTIFY` / `COPY` / `DO`
+   - cost-cap and row-cap enforcement
+   - DB-level denial as `analyst_ro`
+   - injected instructions in result rows and docs
+   - error-message leakage, secrets in logs/trace, missing or wrong API key, rate limit, and oversized questions
+   - a non-enum chart type from the LLM
 
 ## Stack
 Python 3.11 · LangGraph · LangChain (`langchain-openai` `ChatOpenAI` → OpenRouter, see below) · PostgreSQL 16 · SQLAlchemy + psycopg · sqlglot · Pandas · ChromaDB (local persistent) + fastembed (local embeddings, no API key) · Plotly · FastAPI + Uvicorn · Streamlit · pytest · Docker Compose.
@@ -66,8 +110,8 @@ question, intent, entities, metrics, filters, time_range, retrieved_context, pla
 understand → retrieve → (clarify? → END) → plan → generate_sql → validate ⟲ (on error, back to generate_sql with errors, max 3) → execute → verify ⟲ (empty/irrelevant → generate_sql once) → analyze → visualize → respond → grounding_check ⟲ (regenerate once) → END
 
 ## API contract
-`POST /analyze` {"question": str} → {"answer", "sql", "data", "columns", "visualization" (Plotly JSON or null), "analysis", "grounded", "needs_clarification", "clarification_question", "trace", "latency_ms"}
-Also `GET /health`, `GET /schema`. Every request is logged to `logs/audit.jsonl` (question, sql, validation result, row count, latency, grounded).
+`POST /analyze` (header `X-API-Key`) {"question": str, ≤ 500 chars} → {"answer", "sql", "data", "columns", "visualization" (Plotly JSON or null), "analysis", "grounded", "needs_clarification", "clarification_question", "trace", "latency_ms", "request_id"}; errors → `{"error": <generic message>, "request_id"}` (see Security model §4).
+Also `GET /health` (no auth) and `GET /schema` (auth; serves the allow-listed tables/columns only). Every request is logged to `logs/audit.jsonl` (question, sql, validation result, row count, latency, grounded).
 
 ## Commands
 - `docker compose up -d db` → start Postgres (applies schema.sql + roles.sql on first run of an empty volume)
