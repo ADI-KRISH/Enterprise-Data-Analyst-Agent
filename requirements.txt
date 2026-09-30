@@ -4,8 +4,8 @@
 langgraph>=1.2,<2
 langchain>=1.4,<2
 langchain-core>=1.6,<2
-langchain-anthropic>=1.7,<2
-anthropic>=1.9,<2
+langchain-openai>=1.6,<2
+openai>=3.22,<4
 
 # Database
 sqlalchemy>=2.1,<3

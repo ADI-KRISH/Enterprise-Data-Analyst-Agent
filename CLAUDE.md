@@ -20,12 +20,21 @@ An AI analytics agent: natural-language business question → intent/plan → sc
 6. Relative dates ("last quarter", "this month") resolve against `ANCHOR_DATE` = max(order_date) in the data, not the system clock. Document this in `retrieval/docs/reporting_policies.md`.
 
 ## Stack
-Python 3.11 · LangGraph · LangChain (`langchain-anthropic`, model from env `LLM_MODEL`) · PostgreSQL 16 · SQLAlchemy + psycopg · sqlglot · Pandas · ChromaDB (local persistent) + fastembed (local embeddings, no API key) · Plotly · FastAPI + Uvicorn · Streamlit · pytest · Docker Compose.
+Python 3.11 · LangGraph · LangChain (`langchain-openai` `ChatOpenAI` → OpenRouter, see below) · PostgreSQL 16 · SQLAlchemy + psycopg · sqlglot · Pandas · ChromaDB (local persistent) + fastembed (local embeddings, no API key) · Plotly · FastAPI + Uvicorn · Streamlit · pytest · Docker Compose.
+
+### LLM provider (OpenRouter, OpenAI-compatible) — `app/llm.py`
+- `ChatOpenAI(base_url="https://openrouter.ai/api/v1", temperature=0, timeout=LLM_TIMEOUT_S=60)`, key `OPENROUTER_API_KEY`.
+- `get_llm(kind: "strong" | "fast")`: `LLM_MODEL_STRONG` (default `nvidia/nemotron-3-ultra-550b-a55b:free`) / `LLM_MODEL_FAST` (default `qwen/qwen3.8-27b:free`), each `.with_fallbacks([LLM_MODEL_FALLBACK])` (default `nvidia/nemotron-3-super-120b-a12b:free`).
+- Node tiers (`NODE_LLM_KIND`): planner, sql_generator → strong; understand, clarifier, responder → fast.
+- Reasoning: `extra_body={"reasoning": {"effort": "low", "exclude": True}}` so thinking never lands in content; `<think>` blocks are also stripped defensively.
+- HTTP 429 → exponential backoff with jitter, max 3 retries (then fallback). Client-level retries are disabled to avoid double retrying.
+- Structured output: JSON mode (`response_format={"type":"json_object"}`) + Pydantic validation via `invoke_structured`, one repair retry on parse/validation failure, then `StructuredOutputError`.
+- Every call appends `{"node", "event": "llm_call", "model", "latency_ms", ...}` to `state.trace`; `model` is the model that actually answered (from the response), so fallbacks are visible.
 
 ## Repository layout
 ```
 enterprise-data-analyst-agent/
-├── app/            main.py (FastAPI), graph.py (LangGraph), state.py, config.py, audit.py
+├── app/            main.py (FastAPI), graph.py (LangGraph), state.py, config.py, llm.py, audit.py
 ├── agents/         understand.py, planner.py, sql_generator.py, sql_validator.py,
 │                   executor.py, verifier.py, responder.py, grounding.py, clarifier.py
 ├── retrieval/      docs/ (kpi_definitions.md, data_dictionary.md, reporting_policies.md),
@@ -70,6 +79,6 @@ Also `GET /health`, `GET /schema`. Every request is logged to `logs/audit.jsonl`
 
 ## Working style for Claude Code
 - Work phase by phase; after each phase run tests / a smoke check, then `git commit` with a clear message.
-- Prefer small, typed, testable functions. Pydantic models for LLM structured outputs (`with_structured_output`).
+- Prefer small, typed, testable functions. Pydantic models for LLM structured outputs (JSON mode + `app.llm.invoke_structured`, not `with_structured_output`).
 - Keep secrets in `.env` (never commit). Provide `.env.example`.
 - If something in this file becomes untrue, update this file in the same commit.

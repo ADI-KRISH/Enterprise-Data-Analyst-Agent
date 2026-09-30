@@ -21,8 +21,14 @@ class Settings(BaseSettings):
     # Admin URL is for database/seed.py only.
     database_url_admin: str | None = Field(None, alias="DATABASE_URL_ADMIN")
 
-    anthropic_api_key: SecretStr | None = Field(None, alias="ANTHROPIC_API_KEY")
-    llm_model: str = Field("claude-sonnet-5-5", alias="LLM_MODEL")
+    # LLM provider: OpenRouter (OpenAI-compatible).
+    openrouter_api_key: SecretStr | None = Field(None, alias="OPENROUTER_API_KEY")
+    llm_model_strong: str = Field("nvidia/nemotron-3-ultra-550b-a55b:free", alias="LLM_MODEL_STRONG")
+    llm_model_fast: str = Field("qwen/qwen3.8-27b:free", alias="LLM_MODEL_FAST")
+    llm_model_fallback: str = Field(
+        "nvidia/nemotron-3-super-120b-a12b:free", alias="LLM_MODEL_FALLBACK"
+    )
+    llm_timeout_s: float = Field(60.0, gt=0, alias="LLM_TIMEOUT_S")
 
     chroma_dir: Path = Field(PROJECT_ROOT / ".chroma", alias="CHROMA_DIR")
     max_sql_attempts: int = Field(3, ge=1, le=10, alias="MAX_SQL_ATTEMPTS")
