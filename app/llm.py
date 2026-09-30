@@ -31,6 +31,7 @@ LLMKind = Literal["strong", "fast"]
 
 # Which model tier each graph node uses.
 NODE_LLM_KIND: dict[str, LLMKind] = {
+    "input_guard": "fast",
     "planner": "strong",
     "sql_generator": "strong",
     "understand": "fast",

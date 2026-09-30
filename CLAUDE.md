@@ -115,9 +115,9 @@ Python 3.11 · LangGraph · LangChain (`langchain-openai` `ChatOpenAI` → OpenR
 ## Repository layout
 ```
 enterprise-data-analyst-agent/
-├── app/            main.py (FastAPI), graph.py (LangGraph), state.py, config.py, llm.py, audit.py
-├── agents/         input_guard.py, understand.py, planner.py, sql_generator.py, sql_validator.py,
-│                   executor.py, verifier.py, responder.py, grounding.py, clarifier.py, output_guard.py
+├── app/            main.py (FastAPI), graph.py (LangGraph), state.py, config.py, llm.py, audit.py, cli.py
+├── agents/         input_guard.py, understand.py, time_range.py, planner.py, sql_generator.py, sql_validator.py,
+│                   executor.py, verifier.py, responder.py, grounding.py, clarifier.py, output_guard.py, prompting.py
 ├── retrieval/      docs/ (kpi_definitions.md, reporting_policies.md, data_dictionary.md/.json — generated),
 │                   column_notes.yaml, data_dictionary.py, build_index.py, retriever.py
 ├── database/       schema.sql, roles.sql, seed.py, allowlist.yaml, allowlist.py
@@ -141,13 +141,18 @@ enterprise-data-analyst-agent/
 Seed: `database/seed.py`, fixed random seed, fixed window 2024-10-01..2026-09-30 (ANCHOR_DATE 2026-09-30), ~50k orders, INR amounts, realistic seasonality (Diwali/festive peaks). Inject documented, explainable patterns (e.g. South India revenue dip in the latest quarter driven by one category + a store closure) so "why" questions have real answers. Record every injected pattern in `database/SEED_NOTES.md` — it is synthetic data and README must say so.
 
 ## Agent state (app/state.py)
-question, guard_category, refused (bool), refusal_reason, intent, entities, metrics, filters, time_range, retrieved_context, plan, sql, validation_errors, sql_attempts (max 3), result_df (records + columns), verification, analysis, chart_spec, answer, grounded (bool), needs_clarification, clarification_question, output_blocked (reason code or null), trace (list of node events), timings.
+question, guard_category, refused (bool), refusal_reason, intent, entities, metrics, filters, time_range, retrieved_context, plan, queries (one per planned query: sql, validated_sql, status, errors, result), sql, validation_errors, sql_attempts (max 3), result_df (records + columns of the first query), verification, analysis, chart_spec, answer, grounded (bool), needs_clarification, clarification_question, output_blocked (reason code or null), error (internal reason code), trace (list of node events), timings.
+- `trace` holds `{"node", "event": "node", "status", "latency_ms", "model"?, "detail"?}` per node run plus the `llm_call` events of that node; never error text. `timings` sums ms per node across loop iterations.
+- Time ranges are resolved by deterministic rules in `agents/time_range.py` against ANCHOR_DATE (read once from the DB as `max(order_date)`); the LLM only extracts the phrase. No period → all available data, stated in the answer.
 
 ## Graph
-input_guard → (not analytics → templated refusal → END) → understand → retrieve → (clarify? → output_guard → END) → plan → generate_sql → validate ⟲ (on error, back to generate_sql with errors, max 3) → execute → verify ⟲ (empty/irrelevant → generate_sql once) → analyze → visualize → respond → grounding_check ⟲ (regenerate once) → output_guard → END
+input_guard → (not analytics → templated refusal → END) → understand → retrieve → (clarify? → output_guard → END) → plan → generate_sql → validate ⟲ (on error, back to generate_sql with errors, max 3) → execute ⟲ (cost-cap / DB error → generate_sql, same budget) → verify ⟲ (empty/irrelevant → generate_sql once) → analyze → visualize → respond → grounding_check ⟲ (regenerate once) → output_guard → END
+- `diagnose` ("why") intent: the planner may emit up to 3 queries (headline change + driver breakdowns with `<metric>_prev` / `<metric>_curr` columns); each goes through the same validator and executor, and only failed ones are regenerated. If some still fail after the budget, the run continues with those that succeeded.
+- Any node exception → audit log + `error`; routing goes straight to output_guard, which returns the generic error.
+- CLI: `python -m app.cli "question" [--json]` prints SQL, result table, answer and a trace summary.
 
 ## API contract
-`POST /analyze` (header `X-API-Key`) {"question": str, ≤ 500 chars} → {"answer", "sql", "data", "columns", "visualization" (Plotly JSON or null), "analysis", "grounded", "needs_clarification", "clarification_question", "refused", "refusal_reason", "output_blocked", "trace", "latency_ms", "request_id"}; errors → `{"error": <generic message>, "request_id"}` (see Security model §4).
+`POST /analyze` (header `X-API-Key`) {"question": str, ≤ 500 chars} → {"answer", "sql", "queries" ([{purpose, sql, row_count}]), "data", "columns", "visualization" (Plotly JSON or null), "analysis", "grounded", "needs_clarification", "clarification_question", "refused", "refusal_reason", "output_blocked", "time_range", "trace", "timings", "latency_ms", "request_id"}; errors → `{"error": <generic message>, "request_id"}` (see Security model §4).
 Also `GET /health` (no auth) and `GET /schema` (auth; serves the allow-listed tables/columns only). Every request is logged to `logs/audit.jsonl` (question, guard category / refusal reason, sql, validation result, row count, latency, grounded, output_blocked).
 
 ## Commands
@@ -157,6 +162,7 @@ Also `GET /health` (no auth) and `GET /schema` (auth; serves the allow-listed ta
 - `python -m retrieval.build_index` → build vector index (chunks docs by `##` heading; fastembed `EMBED_MODEL` downloaded once into `EMBED_CACHE_DIR`)
 - `uvicorn app.main:app --reload` → API on :8000
 - `streamlit run dashboard/streamlit_app.py` → UI on :8501
+- `python -m app.cli "total revenue last quarter"` → run the graph once from the terminal
 - `pytest -q` → tests
 - `python -m eval.run_eval` → evaluation, writes `eval/results/<timestamp>.json`
 

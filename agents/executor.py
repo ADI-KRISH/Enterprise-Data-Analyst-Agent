@@ -23,6 +23,7 @@ from functools import lru_cache
 from typing import Any
 
 import psycopg
+from psycopg import sql as pgsql
 from pydantic import SecretStr
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine, make_url
@@ -30,6 +31,7 @@ from sqlalchemy.exc import DBAPIError
 
 from agents.sql_validator import validate
 from app.audit import audit, new_request_id
+from database.allowlist import load_allowlist
 
 READ_ONLY_ROLE = "analyst_ro"
 GENERIC_ERROR = "Could not answer this question."
@@ -163,6 +165,44 @@ class QueryExecutor:
         conn.exec_driver_sql("SET TRANSACTION READ ONLY")
         conn.exec_driver_sql(f"SET LOCAL statement_timeout = {int(self.timeout_ms)}")
         conn.exec_driver_sql("SET LOCAL search_path = analytics")
+
+    # ------------------------------------------------------------- trusted fixed queries
+    # Built by our code from constants / allowlist identifiers, never from LLM output,
+    # so they bypass the validator (which would, correctly, reject restricted outputs).
+
+    def date_window(self) -> tuple[dt.date, dt.date]:
+        """(min, max) order_date. ANCHOR_DATE = max(order_date) (CLAUDE.md rule 6)."""
+        with self._engine.connect() as conn:
+            self._begin(conn)
+            cur = conn.connection.cursor()
+            cur.execute("SELECT min(order_date), max(order_date) FROM analytics.fact_orders")
+            start, end = cur.fetchone()
+            conn.rollback()
+        if end is None:
+            raise RuntimeError("fact_orders is empty: cannot determine ANCHOR_DATE")
+        return start, end
+
+    def restricted_values(self) -> list[str]:
+        """Distinct values of every restricted column in the allowlist (for output_guard).
+
+        Kept in memory by the caller only; never logged or returned.
+        """
+        allowlist = load_allowlist()
+        values: set[str] = set()
+        with self._engine.connect() as conn:
+            self._begin(conn)
+            cur = conn.connection.cursor()
+            for table, spec in allowlist.tables.items():
+                for column in sorted(spec.restricted):
+                    query = pgsql.SQL("SELECT DISTINCT {col}::text FROM {schema}.{table}").format(
+                        col=pgsql.Identifier(column),
+                        schema=pgsql.Identifier(allowlist.schema),
+                        table=pgsql.Identifier(table),
+                    )
+                    cur.execute(query)
+                    values.update(r[0] for r in cur.fetchall() if r[0])
+            conn.rollback()
+        return sorted(values)
 
     def run(self, sql: str, request_id: str | None = None) -> ExecutionResult:
         request_id = request_id or new_request_id()
