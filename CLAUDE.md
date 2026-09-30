@@ -62,6 +62,41 @@ An AI analytics agent: natural-language business question → intent/plan → sc
    - injected instructions in result rows and docs
    - error-message leakage, secrets in logs/trace, missing or wrong API key, rate limit, and oversized questions
    - a non-enum chart type from the LLM
+   - guardrails (see **Guardrails**):
+     - `input_guard` keyword rules
+     - restricted-column output rejected by the validator
+     - `output_guard` blocking restricted values, SQL errors, and internals
+
+## Guardrails
+Guardrails wrap the pipeline at both ends; they complement the Security model and do not replace it.
+
+1. **`input_guard`** (`agents/input_guard.py`) is the first graph node. It classifies the question as `analytics | off_topic | unsafe_write | prompt_injection | pii_request`.
+   - **Keyword rules run first.** They are deterministic, high-precision patterns such as "drop/delete/truncate/update the … table", "ignore previous instructions", "reveal your system prompt", or "list customer names/phones/emails". A rule match decides the category without an LLM call.
+   - **Otherwise the fast LLM classifies.** It returns `GuardDecision{category, reason}` via `invoke_structured`, with the question in a delimited DATA block (Security model §3).
+   - **Keep rules narrow.** Analytics questions that mention these words, like "how many orders were cancelled?" or "how many unique customers in Chennai?", must pass.
+   - **Only `analytics` continues.** Every other category ends the run with a polite, templated refusal from our code (not LLM text): `refused = true` and `refusal_reason` = the category as a reason code.
+   - **Fail closed.** If the guard LLM fails (`StructuredOutputError` or all models down), the run is refused with `refusal_reason = guard_unavailable`.
+2. **PII protection (restricted columns).**
+   - **Allowlist marking.** `database/allowlist.yaml` marks `dim_customer.name` as restricted with a per-table `restricted: [name]` list; the column stays in `columns`.
+   - **Where it may be used.** A restricted column may appear in `WHERE`, `JOIN`, `GROUP BY`, `HAVING`, `ORDER BY`, and inside `COUNT(...)` / `COUNT(DISTINCT ...)`.
+   - **Where it may not.** It must never reach an output column. `agents/sql_validator.py` rejects any query whose top-level output depends on one:
+     - selected directly or through an alias
+     - through a CTE or subquery that outputs it
+     - wrapped in any expression other than `COUNT` (e.g. `upper(name)`, `min(name)`)
+     - through `SELECT *` or `t.*` over `dim_customer`
+3. **`output_guard`** (`agents/output_guard.py`) is the last graph node. It is deterministic, with no LLM call.
+   - **What it checks.** The user-facing text (`answer`, `analysis` text, `clarification_question`) and the returned `data` / `columns`. The `sql` field is returned by design and is not scanned for table names.
+   - **What it blocks:**
+     - **restricted values** (e.g. customer names). These are loaded once at startup by trusted code (a fixed query as `analyst_ro`, never LLM SQL), kept only in memory, never logged or returned, and matched case-insensitively on word boundaries.
+     - **raw SQL/driver errors and stack traces** (`ERROR:`, `SQLSTATE`, `syntax error at or near`, `permission denied`, `psycopg`, `Traceback`).
+     - **internals** (`pg_catalog`, `information_schema`, `analytics.` qualified names, connection strings, key-like tokens).
+   - **On a hit** it replaces the response with the generic error plus `request_id` (Security model §4) and sets `output_blocked` to the reason code. The unredacted text goes only to `logs/audit.jsonl`.
+4. **Evaluation of guardrails.**
+   - **Test cases.** `eval/questions.yaml` includes at least 8 guardrail cases (`expected: refuse`, `expected_reason`), with at least 2 each of `off_topic`, `unsafe_write` (delete/drop/update requests), `prompt_injection`, and `pii_request`. It also includes borderline analytics questions that must *not* be refused.
+   - **What `eval/run_eval.py` reports, separately:**
+     - **guardrail block rate:** guardrail cases refused ÷ guardrail cases, plus reason-code accuracy
+     - **false-refusal rate:** analytics cases refused or output-blocked ÷ analytics cases
+   - Rule 5 applies: these figures only appear in docs when produced by `run_eval.py`.
 
 ## Stack
 Python 3.11 · LangGraph · LangChain (`langchain-openai` `ChatOpenAI` → OpenRouter, see below) · PostgreSQL 16 · SQLAlchemy + psycopg · sqlglot · Pandas · ChromaDB (local persistent) + fastembed (local embeddings, no API key) · Plotly · FastAPI + Uvicorn · Streamlit · pytest · Docker Compose.
@@ -69,7 +104,7 @@ Python 3.11 · LangGraph · LangChain (`langchain-openai` `ChatOpenAI` → OpenR
 ### LLM provider (OpenRouter, OpenAI-compatible) — `app/llm.py`
 - `ChatOpenAI(base_url="https://openrouter.ai/api/v1", temperature=0, timeout=LLM_TIMEOUT_S=60)`, key `OPENROUTER_API_KEY`.
 - `get_llm(kind: "strong" | "fast")`: `LLM_MODEL_STRONG` (default `nvidia/nemotron-3-ultra-550b-a55b:free`) / `LLM_MODEL_FAST` (default `qwen/qwen3.8-27b:free`), each `.with_fallbacks([LLM_MODEL_FALLBACK])` (default `nvidia/nemotron-3-super-120b-a12b:free`).
-- Node tiers (`NODE_LLM_KIND`): planner, sql_generator → strong; understand, clarifier, responder → fast.
+- Node tiers (`NODE_LLM_KIND`): planner, sql_generator → strong; input_guard, understand, clarifier, responder → fast. (`output_guard` makes no LLM call.)
 - Reasoning: `extra_body={"reasoning": {"effort": "low", "exclude": True}}` so thinking never lands in content; `<think>` blocks are also stripped defensively.
 - HTTP 429 → exponential backoff with jitter, max 3 retries (then fallback). Client-level retries are disabled to avoid double retrying.
 - Structured output: JSON mode (`response_format={"type":"json_object"}`) + Pydantic validation via `invoke_structured`, one repair retry on parse/validation failure, then `StructuredOutputError`.
@@ -79,15 +114,15 @@ Python 3.11 · LangGraph · LangChain (`langchain-openai` `ChatOpenAI` → OpenR
 ```
 enterprise-data-analyst-agent/
 ├── app/            main.py (FastAPI), graph.py (LangGraph), state.py, config.py, llm.py, audit.py
-├── agents/         understand.py, planner.py, sql_generator.py, sql_validator.py,
-│                   executor.py, verifier.py, responder.py, grounding.py, clarifier.py
+├── agents/         input_guard.py, understand.py, planner.py, sql_generator.py, sql_validator.py,
+│                   executor.py, verifier.py, responder.py, grounding.py, clarifier.py, output_guard.py
 ├── retrieval/      docs/ (kpi_definitions.md, data_dictionary.md, reporting_policies.md),
 │                   build_index.py, retriever.py
 ├── database/       schema.sql, roles.sql, seed.py, allowlist.yaml
 ├── analytics/      analysis.py (growth, share, top_n, period_compare, driver_breakdown)
 ├── visualization/  charts.py (returns Plotly JSON spec; chart choice from result shape + intent)
 ├── dashboard/      streamlit_app.py
-├── eval/           questions.yaml (question + gold SQL), run_eval.py, results/
+├── eval/           questions.yaml (question + gold SQL, plus guardrail cases), run_eval.py, results/
 ├── tests/
 ├── docker-compose.yml, Dockerfile, requirements.txt, .env.example, README.md
 ```
@@ -104,14 +139,14 @@ enterprise-data-analyst-agent/
 Seed: `database/seed.py`, fixed random seed, fixed window 2024-10-01..2026-09-30 (ANCHOR_DATE 2026-09-30), ~50k orders, INR amounts, realistic seasonality (Diwali/festive peaks). Inject documented, explainable patterns (e.g. South India revenue dip in the latest quarter driven by one category + a store closure) so "why" questions have real answers. Record every injected pattern in `database/SEED_NOTES.md` — it is synthetic data and README must say so.
 
 ## Agent state (app/state.py)
-question, intent, entities, metrics, filters, time_range, retrieved_context, plan, sql, validation_errors, sql_attempts (max 3), result_df (records + columns), verification, analysis, chart_spec, answer, grounded (bool), needs_clarification, clarification_question, trace (list of node events), timings.
+question, guard_category, refused (bool), refusal_reason, intent, entities, metrics, filters, time_range, retrieved_context, plan, sql, validation_errors, sql_attempts (max 3), result_df (records + columns), verification, analysis, chart_spec, answer, grounded (bool), needs_clarification, clarification_question, output_blocked (reason code or null), trace (list of node events), timings.
 
 ## Graph
-understand → retrieve → (clarify? → END) → plan → generate_sql → validate ⟲ (on error, back to generate_sql with errors, max 3) → execute → verify ⟲ (empty/irrelevant → generate_sql once) → analyze → visualize → respond → grounding_check ⟲ (regenerate once) → END
+input_guard → (not analytics → templated refusal → END) → understand → retrieve → (clarify? → output_guard → END) → plan → generate_sql → validate ⟲ (on error, back to generate_sql with errors, max 3) → execute → verify ⟲ (empty/irrelevant → generate_sql once) → analyze → visualize → respond → grounding_check ⟲ (regenerate once) → output_guard → END
 
 ## API contract
-`POST /analyze` (header `X-API-Key`) {"question": str, ≤ 500 chars} → {"answer", "sql", "data", "columns", "visualization" (Plotly JSON or null), "analysis", "grounded", "needs_clarification", "clarification_question", "trace", "latency_ms", "request_id"}; errors → `{"error": <generic message>, "request_id"}` (see Security model §4).
-Also `GET /health` (no auth) and `GET /schema` (auth; serves the allow-listed tables/columns only). Every request is logged to `logs/audit.jsonl` (question, sql, validation result, row count, latency, grounded).
+`POST /analyze` (header `X-API-Key`) {"question": str, ≤ 500 chars} → {"answer", "sql", "data", "columns", "visualization" (Plotly JSON or null), "analysis", "grounded", "needs_clarification", "clarification_question", "refused", "refusal_reason", "output_blocked", "trace", "latency_ms", "request_id"}; errors → `{"error": <generic message>, "request_id"}` (see Security model §4).
+Also `GET /health` (no auth) and `GET /schema` (auth; serves the allow-listed tables/columns only). Every request is logged to `logs/audit.jsonl` (question, guard category / refusal reason, sql, validation result, row count, latency, grounded, output_blocked).
 
 ## Commands
 - `docker compose up -d db` → start Postgres (applies schema.sql + roles.sql on first run of an empty volume)
