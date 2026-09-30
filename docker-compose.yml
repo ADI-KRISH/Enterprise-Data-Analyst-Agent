@@ -13,8 +13,10 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       # Init scripts run once, in lexical order, on an empty data volume.
+      # Data is loaded afterwards with `python -m database.seed` (admin URL).
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
-      - ./database/roles.sql:/docker-entrypoint-initdb.d/02_roles.sql:ro
+      - ./database/init_roles.sh:/docker-entrypoint-initdb.d/02_roles.sh:ro
+      - ./database/roles.sql:/opt/eda/roles.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s

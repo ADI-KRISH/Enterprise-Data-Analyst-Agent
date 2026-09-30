@@ -1,3 +1,25 @@
-# Allow-listed tables/columns in schema analytics. Populated in Phase 1.
+# Tables and columns the SQL validator allows (schema analytics only).
+# Must match database/schema.sql — enforced by tests/test_database_files.py.
 schema: analytics
-tables: {}
+tables:
+  dim_date:
+    description: One row per calendar day in the order window. Indian fiscal year (Apr-Mar).
+    columns: [date_key, date, day, month, month_name, quarter, year, fiscal_quarter, fiscal_year]
+  dim_region:
+    description: Five sales regions of India.
+    columns: [region_id, region_name, zone]
+  dim_store:
+    description: Physical stores; also the fulfilling store for Online orders.
+    columns: [store_id, store_name, city, state, region_id]
+  dim_customer:
+    description: Customers with segment (Consumer/Corporate/SMB) and home region.
+    columns: [customer_id, name, segment, city, state, region_id, signup_date]
+  dim_product:
+    description: Product catalogue with category hierarchy, brand, unit cost and list price (INR).
+    columns: [product_id, product_name, category, sub_category, brand, unit_cost, list_price]
+  fact_orders:
+    description: Order header. channel Online/Store; status Completed/Returned/Cancelled.
+    columns: [order_id, order_date, customer_id, store_id, channel, status]
+  fact_order_items:
+    description: Order lines. line_revenue = quantity * unit_price * (1 - discount_pct/100), INR.
+    columns: [order_item_id, order_id, product_id, quantity, unit_price, discount_pct, line_revenue, line_cost]

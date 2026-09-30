@@ -50,14 +50,14 @@ enterprise-data-analyst-agent/
 
 ## Data model (schema `analytics`, star schema, synthetic Indian retail)
 - `dim_date`(date_key, date, day, month, month_name, quarter, year, fiscal_quarter, fiscal_year) — Indian FY (Apr–Mar)
-- `dim_region`(region_id, region_name: North/South/East/West/Central India, zone)
+- `dim_region`(region_id, region_name: 'North India'/'South India'/'East India'/'West India'/'Central India', zone)
 - `dim_store`(store_id, store_name, city, state, region_id)
 - `dim_customer`(customer_id, name, segment: Consumer/Corporate/SMB, city, state, region_id, signup_date)
 - `dim_product`(product_id, product_name, category, sub_category, brand, unit_cost, list_price)
 - `fact_orders`(order_id, order_date, customer_id, store_id, channel: Online/Store, status: Completed/Returned/Cancelled)
 - `fact_order_items`(order_item_id, order_id, product_id, quantity, unit_price, discount_pct, line_revenue, line_cost)
 
-Seed: `database/seed.py`, fixed random seed, ~24 months, ~50k orders, INR amounts, realistic seasonality (Diwali/festive peaks). Inject documented, explainable patterns (e.g. South India revenue dip in the latest quarter driven by one category + a store closure) so "why" questions have real answers. Record every injected pattern in `database/SEED_NOTES.md` — it is synthetic data and README must say so.
+Seed: `database/seed.py`, fixed random seed, fixed window 2024-10-01..2026-09-30 (ANCHOR_DATE 2026-09-30), ~50k orders, INR amounts, realistic seasonality (Diwali/festive peaks). Inject documented, explainable patterns (e.g. South India revenue dip in the latest quarter driven by one category + a store closure) so "why" questions have real answers. Record every injected pattern in `database/SEED_NOTES.md` — it is synthetic data and README must say so.
 
 ## Agent state (app/state.py)
 question, intent, entities, metrics, filters, time_range, retrieved_context, plan, sql, validation_errors, sql_attempts (max 3), result_df (records + columns), verification, analysis, chart_spec, answer, grounded (bool), needs_clarification, clarification_question, trace (list of node events), timings.
@@ -70,7 +70,8 @@ understand → retrieve → (clarify? → END) → plan → generate_sql → val
 Also `GET /health`, `GET /schema`. Every request is logged to `logs/audit.jsonl` (question, sql, validation result, row count, latency, grounded).
 
 ## Commands
-- `docker compose up -d db` → start Postgres (seeds on first run)
+- `docker compose up -d db` → start Postgres (applies schema.sql + roles.sql on first run of an empty volume)
+- `python -m database.seed` → load deterministic synthetic data (admin URL; truncates and reloads)
 - `python -m retrieval.build_index` → build vector index
 - `uvicorn app.main:app --reload` → API on :8000
 - `streamlit run dashboard/streamlit_app.py` → UI on :8501
