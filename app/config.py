@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     llm_timeout_s: float = Field(60.0, gt=0, alias="LLM_TIMEOUT_S")
 
     chroma_dir: Path = Field(PROJECT_ROOT / ".chroma", alias="CHROMA_DIR")
+    embed_model: str = Field("BAAI/bge-small-en-v1.5", alias="EMBED_MODEL")
+    embed_cache_dir: Path = Field(PROJECT_ROOT / ".cache" / "fastembed", alias="EMBED_CACHE_DIR")
     max_sql_attempts: int = Field(3, ge=1, le=10, alias="MAX_SQL_ATTEMPTS")
     default_row_limit: int = Field(1000, ge=1, le=100_000, alias="DEFAULT_ROW_LIMIT")
 

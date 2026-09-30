@@ -14,6 +14,7 @@ tables:
   dim_customer:
     description: Customers with segment (Consumer/Corporate/SMB) and home region.
     columns: [customer_id, name, segment, city, state, region_id, signup_date]
+    restricted: [name]  # PII: never an output column (see CLAUDE.md Guardrails §2)
   dim_product:
     description: Product catalogue with category hierarchy, brand, unit cost and list price (INR).
     columns: [product_id, product_name, category, sub_category, brand, unit_cost, list_price]

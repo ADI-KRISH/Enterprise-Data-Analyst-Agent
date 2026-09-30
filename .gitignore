@@ -17,6 +17,7 @@ htmlcov/
 
 # Local state
 .chroma/
+.cache/
 logs/*
 !logs/.gitkeep
 eval/results/*

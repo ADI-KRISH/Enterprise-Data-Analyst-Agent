@@ -116,9 +116,9 @@ enterprise-data-analyst-agent/
 ├── app/            main.py (FastAPI), graph.py (LangGraph), state.py, config.py, llm.py, audit.py
 ├── agents/         input_guard.py, understand.py, planner.py, sql_generator.py, sql_validator.py,
 │                   executor.py, verifier.py, responder.py, grounding.py, clarifier.py, output_guard.py
-├── retrieval/      docs/ (kpi_definitions.md, data_dictionary.md, reporting_policies.md),
-│                   build_index.py, retriever.py
-├── database/       schema.sql, roles.sql, seed.py, allowlist.yaml
+├── retrieval/      docs/ (kpi_definitions.md, reporting_policies.md, data_dictionary.md/.json — generated),
+│                   column_notes.yaml, data_dictionary.py, build_index.py, retriever.py
+├── database/       schema.sql, roles.sql, seed.py, allowlist.yaml, allowlist.py
 ├── analytics/      analysis.py (growth, share, top_n, period_compare, driver_breakdown)
 ├── visualization/  charts.py (returns Plotly JSON spec; chart choice from result shape + intent)
 ├── dashboard/      streamlit_app.py
@@ -151,7 +151,8 @@ Also `GET /health` (no auth) and `GET /schema` (auth; serves the allow-listed ta
 ## Commands
 - `docker compose up -d db` → start Postgres (applies schema.sql + roles.sql on first run of an empty volume)
 - `python -m database.seed` → load deterministic synthetic data (admin URL; truncates and reloads)
-- `python -m retrieval.build_index` → build vector index
+- `python -m retrieval.data_dictionary` → regenerate `retrieval/docs/data_dictionary.{json,md}` from the live DB (as `analyst_ro`; meanings from `retrieval/column_notes.yaml`); rerun after schema/seed changes
+- `python -m retrieval.build_index` → build vector index (chunks docs by `##` heading; fastembed `EMBED_MODEL` downloaded once into `EMBED_CACHE_DIR`)
 - `uvicorn app.main:app --reload` → API on :8000
 - `streamlit run dashboard/streamlit_app.py` → UI on :8501
 - `pytest -q` → tests

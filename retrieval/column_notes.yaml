@@ -1,0 +1,55 @@
+# Human-written meaning of every allow-listed column. Types, keys, row counts and
+# example values are introspected from the database by retrieval/data_dictionary.py.
+# Must cover exactly the columns in database/allowlist.yaml (tests/test_retrieval.py).
+dim_date:
+  date_key: Surrogate key, the date as integer YYYYMMDD.
+  date: Calendar date; join key for fact_orders.order_date.
+  day: Day of month (1-31).
+  month: Calendar month number (1 = January).
+  month_name: English month name.
+  quarter: Calendar quarter (1 = Jan-Mar). Default for "Q1..Q4" questions.
+  year: Calendar year.
+  fiscal_quarter: Indian fiscal quarter (1 = Apr-Jun, 2 = Jul-Sep, 3 = Oct-Dec, 4 = Jan-Mar).
+  fiscal_year: Indian fiscal year label (April-March), e.g. FY2026-27.
+dim_region:
+  region_id: Region identifier.
+  region_name: Sales region name; use exactly these values in filters.
+  zone: Grouping of regions; North-Central contains North India and Central India.
+dim_store:
+  store_id: Store identifier.
+  store_name: Store name, "City - Locality".
+  city: City where the store is located (official current names, e.g. Bengaluru).
+  state: Indian state / union territory of the store.
+  region_id: Region of the store; sales geography uses this.
+dim_customer:
+  customer_id: Customer identifier.
+  name: Customer full name. RESTRICTED personal data - never return as an output column.
+  segment: Customer segment.
+  city: City where the customer lives.
+  state: State where the customer lives.
+  region_id: Home region of the customer.
+  signup_date: Date the customer registered.
+dim_product:
+  product_id: Product identifier.
+  product_name: Product name (brand + sub-category + model code).
+  category: Top-level product category.
+  sub_category: Product sub-category within the category.
+  brand: Product brand.
+  unit_cost: Cost of goods per unit, INR.
+  list_price: Retail list price per unit, INR (before discount).
+fact_orders:
+  order_id: Order identifier (one row per order).
+  order_date: Date the order was placed; relative dates resolve against max(order_date).
+  customer_id: Customer who placed the order.
+  store_id: Selling / fulfilling store (also set for Online orders).
+  channel: Sales channel.
+  status: Order status; revenue KPIs count Completed only.
+fact_order_items:
+  order_item_id: Order line identifier.
+  order_id: Order this line belongs to.
+  product_id: Product sold on this line.
+  quantity: Units on this line.
+  unit_price: Price per unit before discount, INR.
+  discount_pct: Discount percentage on this line (0-100 scale, e.g. 10 = 10%).
+  line_revenue: Net line revenue, INR = quantity * unit_price * (1 - discount_pct/100).
+  line_cost: Line cost of goods, INR = quantity * dim_product.unit_cost.

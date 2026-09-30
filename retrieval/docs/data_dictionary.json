@@ -1,0 +1,896 @@
+{
+  "schema": "analytics",
+  "tables": {
+    "dim_date": {
+      "description": "One row per calendar day in the order window. Indian fiscal year (Apr-Mar).",
+      "row_count": 730,
+      "primary_key": [
+        "date_key"
+      ],
+      "foreign_keys": [],
+      "columns": [
+        {
+          "name": "date_key",
+          "type": "integer",
+          "nullable": false,
+          "meaning": "Surrogate key, the date as integer YYYYMMDD.",
+          "restricted": false,
+          "distinct": 730,
+          "range": [
+            "20241001",
+            "20260930"
+          ]
+        },
+        {
+          "name": "date",
+          "type": "date",
+          "nullable": false,
+          "meaning": "Calendar date; join key for fact_orders.order_date.",
+          "restricted": false,
+          "distinct": 730,
+          "range": [
+            "2024-10-01",
+            "2026-09-30"
+          ]
+        },
+        {
+          "name": "day",
+          "type": "smallint",
+          "nullable": false,
+          "meaning": "Day of month (1-31).",
+          "restricted": false,
+          "distinct": 31,
+          "range": [
+            "1",
+            "31"
+          ]
+        },
+        {
+          "name": "month",
+          "type": "smallint",
+          "nullable": false,
+          "meaning": "Calendar month number (1 = January).",
+          "restricted": false,
+          "distinct": 12,
+          "range": [
+            "1",
+            "12"
+          ]
+        },
+        {
+          "name": "month_name",
+          "type": "text",
+          "nullable": false,
+          "meaning": "English month name.",
+          "restricted": false,
+          "distinct": 12,
+          "values": [
+            "April",
+            "August",
+            "December",
+            "February",
+            "January",
+            "July",
+            "June",
+            "March",
+            "May",
+            "November",
+            "October",
+            "September"
+          ]
+        },
+        {
+          "name": "quarter",
+          "type": "smallint",
+          "nullable": false,
+          "meaning": "Calendar quarter (1 = Jan-Mar). Default for \"Q1..Q4\" questions.",
+          "restricted": false,
+          "distinct": 4,
+          "range": [
+            "1",
+            "4"
+          ]
+        },
+        {
+          "name": "year",
+          "type": "smallint",
+          "nullable": false,
+          "meaning": "Calendar year.",
+          "restricted": false,
+          "distinct": 3,
+          "range": [
+            "2024",
+            "2026"
+          ]
+        },
+        {
+          "name": "fiscal_quarter",
+          "type": "smallint",
+          "nullable": false,
+          "meaning": "Indian fiscal quarter (1 = Apr-Jun, 2 = Jul-Sep, 3 = Oct-Dec, 4 = Jan-Mar).",
+          "restricted": false,
+          "distinct": 4,
+          "range": [
+            "1",
+            "4"
+          ]
+        },
+        {
+          "name": "fiscal_year",
+          "type": "text",
+          "nullable": false,
+          "meaning": "Indian fiscal year label (April-March), e.g. FY2026-27.",
+          "restricted": false,
+          "distinct": 3,
+          "values": [
+            "FY2024-25",
+            "FY2025-26",
+            "FY2026-27"
+          ]
+        }
+      ]
+    },
+    "dim_region": {
+      "description": "Five sales regions of India.",
+      "row_count": 5,
+      "primary_key": [
+        "region_id"
+      ],
+      "foreign_keys": [],
+      "columns": [
+        {
+          "name": "region_id",
+          "type": "smallint",
+          "nullable": false,
+          "meaning": "Region identifier.",
+          "restricted": false,
+          "distinct": 5,
+          "range": [
+            "1",
+            "5"
+          ]
+        },
+        {
+          "name": "region_name",
+          "type": "text",
+          "nullable": false,
+          "meaning": "Sales region name; use exactly these values in filters.",
+          "restricted": false,
+          "distinct": 5,
+          "values": [
+            "Central India",
+            "East India",
+            "North India",
+            "South India",
+            "West India"
+          ]
+        },
+        {
+          "name": "zone",
+          "type": "text",
+          "nullable": false,
+          "meaning": "Grouping of regions; North-Central contains North India and Central India.",
+          "restricted": false,
+          "distinct": 4,
+          "values": [
+            "East",
+            "North-Central",
+            "South",
+            "West"
+          ]
+        }
+      ]
+    },
+    "dim_store": {
+      "description": "Physical stores; also the fulfilling store for Online orders.",
+      "row_count": 40,
+      "primary_key": [
+        "store_id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "region_id",
+          "ref_table": "dim_region",
+          "ref_column": "region_id"
+        }
+      ],
+      "columns": [
+        {
+          "name": "store_id",
+          "type": "integer",
+          "nullable": false,
+          "meaning": "Store identifier.",
+          "restricted": false,
+          "distinct": 40,
+          "range": [
+            "1",
+            "40"
+          ]
+        },
+        {
+          "name": "store_name",
+          "type": "text",
+          "nullable": false,
+          "meaning": "Store name, \"City - Locality\".",
+          "restricted": false,
+          "distinct": 40,
+          "values": [
+            "Ahmedabad - SG Highway",
+            "Amritsar - Lawrence Road",
+            "Bengaluru - Indiranagar",
+            "Bengaluru - Koramangala",
+            "Bhopal - MP Nagar",
+            "Bhubaneswar - Saheed Nagar",
+            "Chandigarh - Sector 17",
+            "Chennai - T Nagar",
+            "Chennai - Velachery",
+            "Coimbatore - RS Puram",
+            "Dehradun - Rajpur Road",
+            "Delhi - Connaught Place",
+            "Delhi - Rajouri Garden",
+            "Gurugram - Cyber Hub",
+            "Guwahati - GS Road",
+            "Gwalior - City Centre",
+            "Hyderabad - Banjara Hills",
+            "Indore - Vijay Nagar",
+            "Jabalpur - Napier Town",
+            "Jaipur - MI Road",
+            "Kochi - MG Road",
+            "Kolkata - Park Street",
+            "Kolkata - Salt Lake",
+            "Lucknow - Hazratganj",
+            "Mumbai - Andheri East",
+            "Mumbai - Bandra West",
+            "Mysuru - Sayyaji Rao Road",
+            "Nagpur - Sitabuldi",
+            "Nashik - College Road",
+            "Noida - Sector 18",
+            "Panaji - 18th June Road",
+            "Patna - Fraser Road",
+            "Pune - FC Road",
+            "Pune - Viman Nagar",
+            "Raipur - Pandri",
+            "Ranchi - Main Road",
+            "Siliguri - Sevoke Road",
+            "Surat - Adajan",
+            "Vadodara - Alkapuri",
+            "Visakhapatnam - Dwaraka Nagar"
+          ]
+        },
+        {
+          "name": "city",
+          "type": "text",
+          "nullable": false,
+          "meaning": "City where the store is located (official current names, e.g. Bengaluru).",
+          "restricted": false,
+          "distinct": 34,
+          "values": [
+            "Ahmedabad",
+            "Amritsar",
+            "Bengaluru",
+            "Bhopal",
+            "Bhubaneswar",
+            "Chandigarh",
+            "Chennai",
+            "Coimbatore",
+            "Dehradun",
+            "Gurugram",
+            "Guwahati",
+            "Gwalior",
+            "Hyderabad",
+            "Indore",
+            "Jabalpur",
+            "Jaipur",
+            "Kochi",
+            "Kolkata",
+            "Lucknow",
+            "Mumbai",
+            "Mysuru",
+            "Nagpur",
+            "Nashik",
+            "New Delhi",
+            "Noida",
+            "Panaji",
+            "Patna",
+            "Pune",
+            "Raipur",
+            "Ranchi",
+            "Siliguri",
+            "Surat",
+            "Vadodara",
+            "Visakhapatnam"
+          ]
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "nullable": false,
+          "meaning": "Indian state / union territory of the store.",
+          "restricted": false,
+          "distinct": 22,
+          "values": [
+            "Andhra Pradesh",
+            "Assam",
+            "Bihar",
+            "Chandigarh",
+            "Chhattisgarh",
+            "Delhi",
+            "Goa",
+            "Gujarat",
+            "Haryana",
+            "Jharkhand",
+            "Karnataka",
+            "Kerala",
+            "Madhya Pradesh",
+            "Maharashtra",
+            "Odisha",
+            "Punjab",
+            "Rajasthan",
+            "Tamil Nadu",
+            "Telangana",
+            "Uttarakhand",
+            "Uttar Pradesh",
+            "West Bengal"
+          ]
+        },
+        {
+          "name": "region_id",
+          "type": "smallint",
+          "nullable": false,
+          "meaning": "Region of the store; sales geography uses this.",
+          "restricted": false,
+          "distinct": 5,
+          "range": [
+            "1",
+            "5"
+          ]
+        }
+      ]
+    },
+    "dim_customer": {
+      "description": "Customers with segment (Consumer/Corporate/SMB) and home region.",
+      "row_count": 5000,
+      "primary_key": [
+        "customer_id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "region_id",
+          "ref_table": "dim_region",
+          "ref_column": "region_id"
+        }
+      ],
+      "columns": [
+        {
+          "name": "customer_id",
+          "type": "integer",
+          "nullable": false,
+          "meaning": "Customer identifier.",
+          "restricted": false,
+          "distinct": 5000,
+          "range": [
+            "1",
+            "5000"
+          ]
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "meaning": "Customer full name. RESTRICTED personal data - never return as an output column.",
+          "restricted": true
+        },
+        {
+          "name": "segment",
+          "type": "text",
+          "nullable": false,
+          "meaning": "Customer segment.",
+          "restricted": false,
+          "distinct": 3,
+          "values": [
+            "Consumer",
+            "Corporate",
+            "SMB"
+          ]
+        },
+        {
+          "name": "city",
+          "type": "text",
+          "nullable": false,
+          "meaning": "City where the customer lives.",
+          "restricted": false,
+          "distinct": 34,
+          "values": [
+            "Ahmedabad",
+            "Amritsar",
+            "Bengaluru",
+            "Bhopal",
+            "Bhubaneswar",
+            "Chandigarh",
+            "Chennai",
+            "Coimbatore",
+            "Dehradun",
+            "Gurugram",
+            "Guwahati",
+            "Gwalior",
+            "Hyderabad",
+            "Indore",
+            "Jabalpur",
+            "Jaipur",
+            "Kochi",
+            "Kolkata",
+            "Lucknow",
+            "Mumbai",
+            "Mysuru",
+            "Nagpur",
+            "Nashik",
+            "New Delhi",
+            "Noida",
+            "Panaji",
+            "Patna",
+            "Pune",
+            "Raipur",
+            "Ranchi",
+            "Siliguri",
+            "Surat",
+            "Vadodara",
+            "Visakhapatnam"
+          ]
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "nullable": false,
+          "meaning": "State where the customer lives.",
+          "restricted": false,
+          "distinct": 22,
+          "values": [
+            "Andhra Pradesh",
+            "Assam",
+            "Bihar",
+            "Chandigarh",
+            "Chhattisgarh",
+            "Delhi",
+            "Goa",
+            "Gujarat",
+            "Haryana",
+            "Jharkhand",
+            "Karnataka",
+            "Kerala",
+            "Madhya Pradesh",
+            "Maharashtra",
+            "Odisha",
+            "Punjab",
+            "Rajasthan",
+            "Tamil Nadu",
+            "Telangana",
+            "Uttarakhand",
+            "Uttar Pradesh",
+            "West Bengal"
+          ]
+        },
+        {
+          "name": "region_id",
+          "type": "smallint",
+          "nullable": false,
+          "meaning": "Home region of the customer.",
+          "restricted": false,
+          "distinct": 5,
+          "range": [
+            "1",
+            "5"
+          ]
+        },
+        {
+          "name": "signup_date",
+          "type": "date",
+          "nullable": false,
+          "meaning": "Date the customer registered.",
+          "restricted": false,
+          "distinct": 1185,
+          "range": [
+            "2023-04-11",
+            "2026-08-30"
+          ]
+        }
+      ]
+    },
+    "dim_product": {
+      "description": "Product catalogue with category hierarchy, brand, unit cost and list price (INR).",
+      "row_count": 200,
+      "primary_key": [
+        "product_id"
+      ],
+      "foreign_keys": [],
+      "columns": [
+        {
+          "name": "product_id",
+          "type": "integer",
+          "nullable": false,
+          "meaning": "Product identifier.",
+          "restricted": false,
+          "distinct": 200,
+          "range": [
+            "1",
+            "200"
+          ]
+        },
+        {
+          "name": "product_name",
+          "type": "text",
+          "nullable": false,
+          "meaning": "Product name (brand + sub-category + model code).",
+          "restricted": false,
+          "distinct": 200,
+          "examples": [
+            "Aashirvaad Beverages B433",
+            "Aashirvaad Edible Oils D692",
+            "Aashirvaad Pulses B359"
+          ]
+        },
+        {
+          "name": "category",
+          "type": "text",
+          "nullable": false,
+          "meaning": "Top-level product category.",
+          "restricted": false,
+          "distinct": 8,
+          "values": [
+            "Beauty & Personal Care",
+            "Books & Stationery",
+            "Electronics",
+            "Fashion",
+            "Furniture",
+            "Grocery & Staples",
+            "Home Appliances",
+            "Sports & Fitness"
+          ]
+        },
+        {
+          "name": "sub_category",
+          "type": "text",
+          "nullable": false,
+          "meaning": "Product sub-category within the category.",
+          "restricted": false,
+          "distinct": 39,
+          "values": [
+            "Academic",
+            "Accessories",
+            "Air Conditioners",
+            "Art Supplies",
+            "Beds",
+            "Beverages",
+            "Children's Books",
+            "Cricket",
+            "Cycling",
+            "Dining Tables",
+            "Edible Oils",
+            "Ethnic Wear",
+            "Fiction",
+            "Footwear",
+            "Fragrances",
+            "Grooming",
+            "Gym Equipment",
+            "Haircare",
+            "Headphones",
+            "Laptops",
+            "Makeup",
+            "Men's Clothing",
+            "Microwaves",
+            "Mixer Grinders",
+            "Notebooks",
+            "Office Chairs",
+            "Pulses",
+            "Refrigerators",
+            "Rice & Atta",
+            "Skincare",
+            "Smartphones",
+            "Sofas",
+            "Spices",
+            "Sportswear",
+            "Televisions",
+            "Wardrobes",
+            "Washing Machines",
+            "Women's Clothing",
+            "Yoga"
+          ]
+        },
+        {
+          "name": "brand",
+          "type": "text",
+          "nullable": false,
+          "meaning": "Product brand.",
+          "restricted": false,
+          "distinct": 45,
+          "values": [
+            "Aashirvaad",
+            "Allen Solly",
+            "Bajaj",
+            "Bata",
+            "Biotique",
+            "boAt",
+            "Camlin",
+            "Classmate",
+            "Cosco",
+            "Decathlon",
+            "Durian",
+            "Fabindia",
+            "Forest Essentials",
+            "Godrej Interio",
+            "HarperCollins",
+            "Hero",
+            "Himalaya",
+            "IFB",
+            "India Gate",
+            "Lakme",
+            "Lenovo",
+            "LG",
+            "Mamaearth",
+            "MDH",
+            "Nilkamal",
+            "Nivea",
+            "Nivia",
+            "OnePlus",
+            "Penguin",
+            "Peter England",
+            "Prestige",
+            "Puma",
+            "Rupa",
+            "Samsung",
+            "S. Chand",
+            "SG",
+            "Sony",
+            "Tata",
+            "Tata Tea",
+            "Urban Ladder",
+            "Voltas",
+            "W",
+            "Wakefit",
+            "Whirlpool",
+            "Xiaomi"
+          ]
+        },
+        {
+          "name": "unit_cost",
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "meaning": "Cost of goods per unit, INR.",
+          "restricted": false,
+          "distinct": 200,
+          "range": [
+            "56.91",
+            "46318.98"
+          ]
+        },
+        {
+          "name": "list_price",
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "meaning": "Retail list price per unit, INR (before discount).",
+          "restricted": false,
+          "distinct": 140,
+          "range": [
+            "69.00",
+            "60499.00"
+          ]
+        }
+      ]
+    },
+    "fact_orders": {
+      "description": "Order header. channel Online/Store; status Completed/Returned/Cancelled.",
+      "row_count": 50504,
+      "primary_key": [
+        "order_id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "customer_id",
+          "ref_table": "dim_customer",
+          "ref_column": "customer_id"
+        },
+        {
+          "column": "order_date",
+          "ref_table": "dim_date",
+          "ref_column": "date"
+        },
+        {
+          "column": "store_id",
+          "ref_table": "dim_store",
+          "ref_column": "store_id"
+        }
+      ],
+      "columns": [
+        {
+          "name": "order_id",
+          "type": "integer",
+          "nullable": false,
+          "meaning": "Order identifier (one row per order).",
+          "restricted": false,
+          "distinct": 50504,
+          "range": [
+            "1",
+            "50504"
+          ]
+        },
+        {
+          "name": "order_date",
+          "type": "date",
+          "nullable": false,
+          "meaning": "Date the order was placed; relative dates resolve against max(order_date).",
+          "restricted": false,
+          "distinct": 730,
+          "range": [
+            "2024-10-01",
+            "2026-09-30"
+          ]
+        },
+        {
+          "name": "customer_id",
+          "type": "integer",
+          "nullable": false,
+          "meaning": "Customer who placed the order.",
+          "restricted": false,
+          "distinct": 4811,
+          "range": [
+            "1",
+            "5000"
+          ]
+        },
+        {
+          "name": "store_id",
+          "type": "integer",
+          "nullable": false,
+          "meaning": "Selling / fulfilling store (also set for Online orders).",
+          "restricted": false,
+          "distinct": 40,
+          "range": [
+            "1",
+            "40"
+          ]
+        },
+        {
+          "name": "channel",
+          "type": "text",
+          "nullable": false,
+          "meaning": "Sales channel.",
+          "restricted": false,
+          "distinct": 2,
+          "values": [
+            "Online",
+            "Store"
+          ]
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "meaning": "Order status; revenue KPIs count Completed only.",
+          "restricted": false,
+          "distinct": 3,
+          "values": [
+            "Cancelled",
+            "Completed",
+            "Returned"
+          ]
+        }
+      ]
+    },
+    "fact_order_items": {
+      "description": "Order lines. line_revenue = quantity * unit_price * (1 - discount_pct/100), INR.",
+      "row_count": 90357,
+      "primary_key": [
+        "order_item_id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "order_id",
+          "ref_table": "fact_orders",
+          "ref_column": "order_id"
+        },
+        {
+          "column": "product_id",
+          "ref_table": "dim_product",
+          "ref_column": "product_id"
+        }
+      ],
+      "columns": [
+        {
+          "name": "order_item_id",
+          "type": "integer",
+          "nullable": false,
+          "meaning": "Order line identifier.",
+          "restricted": false,
+          "distinct": 90357,
+          "range": [
+            "1",
+            "90357"
+          ]
+        },
+        {
+          "name": "order_id",
+          "type": "integer",
+          "nullable": false,
+          "meaning": "Order this line belongs to.",
+          "restricted": false,
+          "distinct": 50504,
+          "range": [
+            "1",
+            "50504"
+          ]
+        },
+        {
+          "name": "product_id",
+          "type": "integer",
+          "nullable": false,
+          "meaning": "Product sold on this line.",
+          "restricted": false,
+          "distinct": 200,
+          "range": [
+            "1",
+            "200"
+          ]
+        },
+        {
+          "name": "quantity",
+          "type": "integer",
+          "nullable": false,
+          "meaning": "Units on this line.",
+          "restricted": false,
+          "distinct": 9,
+          "range": [
+            "1",
+            "12"
+          ]
+        },
+        {
+          "name": "unit_price",
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "meaning": "Price per unit before discount, INR.",
+          "restricted": false,
+          "distinct": 140,
+          "range": [
+            "69.00",
+            "60499.00"
+          ]
+        },
+        {
+          "name": "discount_pct",
+          "type": "numeric(5,2)",
+          "nullable": false,
+          "meaning": "Discount percentage on this line (0-100 scale, e.g. 10 = 10%).",
+          "restricted": false,
+          "distinct": 9,
+          "range": [
+            "0.00",
+            "40.00"
+          ]
+        },
+        {
+          "name": "line_revenue",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "meaning": "Net line revenue, INR = quantity * unit_price * (1 - discount_pct/100).",
+          "restricted": false,
+          "distinct": 3701,
+          "range": [
+            "44.85",
+            "241996.00"
+          ]
+        },
+        {
+          "name": "line_cost",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "meaning": "Line cost of goods, INR = quantity * dim_product.unit_cost.",
+          "restricted": false,
+          "distinct": 874,
+          "range": [
+            "56.91",
+            "185275.92"
+          ]
+        }
+      ]
+    }
+  }
+}
