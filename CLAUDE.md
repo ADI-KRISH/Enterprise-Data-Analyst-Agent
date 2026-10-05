@@ -20,7 +20,7 @@ An AI analytics agent: natural-language business question → intent/plan → sc
 6. Relative dates ("last quarter", "this month") resolve against `ANCHOR_DATE` = max(order_date) in the data, not the system clock. Document this in `retrieval/docs/reporting_policies.md`.
 
 ## Stack
-Python 3.11 · LangGraph · LangChain (`langchain-openai` `ChatOpenAI` → OpenRouter, see below) · PostgreSQL 16 · SQLAlchemy + psycopg · sqlglot · Pandas · ChromaDB (local persistent) + fastembed (local embeddings, no API key) · Plotly · FastAPI + Uvicorn · Streamlit · pytest · Docker Compose.
+Python 3.11 · LangGraph · LangChain (`langchain-openai` `ChatOpenAI` → OpenRouter, see below) · PostgreSQL 16 · SQLAlchemy + psycopg · sqlglot · Pandas · ChromaDB (local persistent) + fastembed (local embeddings, no API key; `EMBEDDER=auto` falls back to an offline hashed embedder if the model can't be downloaded) · Plotly · FastAPI + Uvicorn · Streamlit · pytest · Docker Compose.
 
 ### LLM provider (OpenRouter, OpenAI-compatible) — `app/llm.py`
 - `ChatOpenAI(base_url="https://openrouter.ai/api/v1", temperature=0, timeout=LLM_TIMEOUT_S=60)`, key `OPENROUTER_API_KEY`.
@@ -36,10 +36,10 @@ Python 3.11 · LangGraph · LangChain (`langchain-openai` `ChatOpenAI` → OpenR
 enterprise-data-analyst-agent/
 ├── app/            main.py (FastAPI), graph.py (LangGraph), state.py, config.py, llm.py, audit.py
 ├── agents/         understand.py, planner.py, sql_generator.py, sql_validator.py,
-│                   executor.py, verifier.py, responder.py, grounding.py, clarifier.py
+│                   executor.py, verifier.py, responder.py, grounding.py, clarifier.py, time_ranges.py
 ├── retrieval/      docs/ (kpi_definitions.md, data_dictionary.md, reporting_policies.md),
-│                   build_index.py, retriever.py
-├── database/       schema.sql, roles.sql, seed.py, allowlist.yaml
+│                   build_index.py, retriever.py, embedding.py
+├── database/       schema.sql, roles.sql (+ roles.sh docker wrapper), seed.py, allowlist.yaml, SEED_NOTES.md
 ├── analytics/      analysis.py (growth, share, top_n, period_compare, driver_breakdown)
 ├── visualization/  charts.py (returns Plotly JSON spec; chart choice from result shape + intent)
 ├── dashboard/      streamlit_app.py
@@ -71,6 +71,7 @@ Also `GET /health`, `GET /schema`. Every request is logged to `logs/audit.jsonl`
 
 ## Commands
 - `docker compose up -d db` → start Postgres (seeds on first run)
+- `python -m database.seed` → load synthetic data (admin URL)
 - `python -m retrieval.build_index` → build vector index
 - `uvicorn app.main:app --reload` → API on :8000
 - `streamlit run dashboard/streamlit_app.py` → UI on :8501

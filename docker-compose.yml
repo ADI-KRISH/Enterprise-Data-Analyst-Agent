@@ -23,5 +23,35 @@ services:
       retries: 10
       start_period: 10s
 
+
+  api:
+    build: .
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      # inside the compose network the DB host is `db`, not localhost
+      DATABASE_URL_RO: postgresql+psycopg://analyst_ro:${ANALYST_RO_PASSWORD}@db:5432/${POSTGRES_DB:-analytics}
+      CHROMA_DIR: /data/chroma
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+      - chroma:/data/chroma
+
+  dashboard:
+    build: .
+    profiles: ["app"]
+    command: ["streamlit", "run", "dashboard/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      - api
+    ports:
+      - "8501:8501"
+
 volumes:
   pgdata:
+  chroma:

@@ -1,2 +1,177 @@
-# Evaluation questions with gold SQL. Populated in Phase 6.
-questions: []
+# Evaluation set. Gold SQL is hand-written against the seeded data (ANCHOR_DATE = 2026-03-31).
+# `expect_clarification: true` questions have no gold SQL: the agent should ask, not answer.
+questions:
+  - id: q01
+    category: aggregate
+    question: What was total revenue in FY2025-26?
+    gold_sql: |
+      SELECT SUM(i.line_revenue) AS revenue
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2025-04-01' AND '2026-03-31'
+  - id: q02
+    category: ranking
+    question: Top 5 product categories by revenue in FY2025-26
+    gold_sql: |
+      SELECT p.category, SUM(i.line_revenue) AS revenue
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      JOIN analytics.dim_product p ON p.product_id = i.product_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2025-04-01' AND '2026-03-31'
+      GROUP BY p.category ORDER BY revenue DESC LIMIT 5
+  - id: q03
+    category: breakdown
+    question: Revenue by region last quarter
+    gold_sql: |
+      SELECT r.region_name, SUM(i.line_revenue) AS revenue
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      JOIN analytics.dim_customer c ON c.customer_id = o.customer_id
+      JOIN analytics.dim_region r ON r.region_id = c.region_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2025-10-01' AND '2025-12-31'
+      GROUP BY r.region_name ORDER BY revenue DESC
+  - id: q04
+    category: trend
+    question: Show the monthly revenue trend for the last 6 months
+    gold_sql: |
+      SELECT d.year, d.month, SUM(i.line_revenue) AS revenue
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      JOIN analytics.dim_date d ON d.date = o.order_date
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2025-10-01' AND '2026-03-31'
+      GROUP BY d.year, d.month ORDER BY d.year, d.month
+  - id: q05
+    category: aggregate
+    question: What is the average order value this month?
+    gold_sql: |
+      SELECT SUM(i.line_revenue) / NULLIF(COUNT(DISTINCT o.order_id), 0) AS aov
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2026-03-01' AND '2026-03-31'
+  - id: q06
+    category: breakdown
+    question: What is the return rate by product category in FY2025-26?
+    gold_sql: |
+      SELECT p.category,
+        100.0 * COUNT(DISTINCT o.order_id) FILTER (WHERE o.status = 'Returned')
+        / NULLIF(COUNT(DISTINCT o.order_id) FILTER (WHERE o.status IN ('Completed','Returned')), 0) AS return_rate_pct
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      JOIN analytics.dim_product p ON p.product_id = i.product_id
+      WHERE o.order_date BETWEEN '2025-04-01' AND '2026-03-31'
+      GROUP BY p.category ORDER BY return_rate_pct DESC
+  - id: q07
+    category: breakdown
+    question: Gross margin percentage by category in FY2025-26
+    gold_sql: |
+      SELECT p.category, 100.0 * SUM(i.line_revenue - i.line_cost) / NULLIF(SUM(i.line_revenue), 0) AS gross_margin_pct
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      JOIN analytics.dim_product p ON p.product_id = i.product_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2025-04-01' AND '2026-03-31'
+      GROUP BY p.category ORDER BY gross_margin_pct DESC
+  - id: q08
+    category: diagnostic
+    question: Why did South India revenue drop in the latest quarter?
+    gold_sql: |
+      SELECT p.category,
+        SUM(i.line_revenue) FILTER (WHERE o.order_date BETWEEN '2025-10-01' AND '2025-12-31') AS prev_revenue,
+        SUM(i.line_revenue) FILTER (WHERE o.order_date BETWEEN '2026-01-01' AND '2026-03-31') AS curr_revenue
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      JOIN analytics.dim_product p ON p.product_id = i.product_id
+      JOIN analytics.dim_customer c ON c.customer_id = o.customer_id
+      JOIN analytics.dim_region r ON r.region_id = c.region_id
+      WHERE o.status = 'Completed' AND r.region_name = 'South India'
+        AND o.order_date BETWEEN '2025-10-01' AND '2026-03-31'
+      GROUP BY p.category
+  - id: q09
+    category: ranking
+    question: Which store had the highest revenue in the latest quarter?
+    gold_sql: |
+      SELECT s.store_name, SUM(i.line_revenue) AS revenue
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      JOIN analytics.dim_store s ON s.store_id = o.store_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2026-01-01' AND '2026-03-31'
+      GROUP BY s.store_name ORDER BY revenue DESC LIMIT 1
+  - id: q10
+    category: comparison
+    question: How did total revenue in the latest quarter compare with the previous quarter?
+    gold_sql: |
+      SELECT
+        SUM(i.line_revenue) FILTER (WHERE o.order_date BETWEEN '2025-10-01' AND '2025-12-31') AS prev_revenue,
+        SUM(i.line_revenue) FILTER (WHERE o.order_date BETWEEN '2026-01-01' AND '2026-03-31') AS curr_revenue
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2025-10-01' AND '2026-03-31'
+  - id: q11
+    category: breakdown
+    question: What is the Online versus Store share of revenue in FY2025-26?
+    gold_sql: |
+      SELECT o.channel, SUM(i.line_revenue) AS revenue
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2025-04-01' AND '2026-03-31'
+      GROUP BY o.channel
+  - id: q12
+    category: breakdown
+    question: How many completed orders did we get per channel last month?
+    gold_sql: |
+      SELECT o.channel, COUNT(DISTINCT o.order_id) AS orders
+      FROM analytics.fact_orders o
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2026-02-01' AND '2026-02-28'
+      GROUP BY o.channel
+  - id: q13
+    category: ranking
+    question: Rank customer segments by revenue in FY2025-26
+    gold_sql: |
+      SELECT c.segment, SUM(i.line_revenue) AS revenue
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      JOIN analytics.dim_customer c ON c.customer_id = o.customer_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2025-04-01' AND '2026-03-31'
+      GROUP BY c.segment ORDER BY revenue DESC
+  - id: q14
+    category: trend
+    question: Monthly revenue for the Chennai T Nagar store in FY2025-26
+    gold_sql: |
+      SELECT d.year, d.month, SUM(i.line_revenue) AS revenue
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      JOIN analytics.dim_store s ON s.store_id = o.store_id
+      JOIN analytics.dim_date d ON d.date = o.order_date
+      WHERE o.status = 'Completed' AND s.store_name = 'Chennai T Nagar'
+        AND o.order_date BETWEEN '2025-04-01' AND '2026-03-31'
+      GROUP BY d.year, d.month ORDER BY d.year, d.month
+  - id: q15
+    category: aggregate
+    question: What was the total discount amount given in November 2025?
+    gold_sql: |
+      SELECT SUM(i.quantity * i.unit_price - i.line_revenue) AS discount_amount
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2025-11-01' AND '2025-11-30'
+  - id: q16
+    category: breakdown
+    question: Units sold by category in the last 30 days
+    gold_sql: |
+      SELECT p.category, SUM(i.quantity) AS units
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      JOIN analytics.dim_product p ON p.product_id = i.product_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2026-03-02' AND '2026-03-31'
+      GROUP BY p.category ORDER BY units DESC
+  - id: q17
+    category: aggregate
+    question: How many active customers did we have in the latest quarter?
+    gold_sql: |
+      SELECT COUNT(DISTINCT o.customer_id) AS active_customers
+      FROM analytics.fact_orders o
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2026-01-01' AND '2026-03-31'
+  - id: q18
+    category: comparison
+    question: Revenue growth for FY2025-26 Q2 compared with the same quarter last year
+    gold_sql: |
+      SELECT
+        SUM(i.line_revenue) FILTER (WHERE o.order_date BETWEEN '2024-07-01' AND '2024-09-30') AS prev_revenue,
+        SUM(i.line_revenue) FILTER (WHERE o.order_date BETWEEN '2025-07-01' AND '2025-09-30') AS curr_revenue
+      FROM analytics.fact_orders o JOIN analytics.fact_order_items i ON i.order_id = o.order_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN '2024-07-01' AND '2025-09-30'
+  - id: q19
+    category: clarification
+    question: What is our customer churn rate?
+    expect_clarification: true
+  - id: q20
+    category: clarification
+    question: What was our marketing ROI last quarter?
+    expect_clarification: true
+  - id: q21
+    category: clarification
+    question: Forecast next quarter's revenue
+    expect_clarification: true

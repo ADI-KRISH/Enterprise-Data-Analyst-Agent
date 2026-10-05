@@ -1,0 +1,7 @@
+.git
+.env
+.venv
+__pycache__
+.chroma
+logs/*
+eval/results/*

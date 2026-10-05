@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -29,6 +29,11 @@ class Settings(BaseSettings):
         "nvidia/nemotron-3-super-120b-a12b:free", alias="LLM_MODEL_FALLBACK"
     )
     llm_timeout_s: float = Field(60.0, gt=0, alias="LLM_TIMEOUT_S")
+
+    @field_validator("openrouter_api_key", "database_url_admin", mode="before")
+    @classmethod
+    def _blank_is_none(cls, v):
+        return None if isinstance(v, str) and not v.strip() else v
 
     chroma_dir: Path = Field(PROJECT_ROOT / ".chroma", alias="CHROMA_DIR")
     max_sql_attempts: int = Field(3, ge=1, le=10, alias="MAX_SQL_ATTEMPTS")
