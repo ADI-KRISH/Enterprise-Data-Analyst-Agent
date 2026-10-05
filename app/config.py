@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # LLM provider: OpenRouter (OpenAI-compatible).
     openrouter_api_key: SecretStr | None = Field(None, alias="OPENROUTER_API_KEY")
     llm_model_strong: str = Field("nvidia/nemotron-3-ultra-550b-a55b:free", alias="LLM_MODEL_STRONG")
-    llm_model_fast: str = Field("nvidia/nemotron-3.5-lightning:free", alias="LLM_MODEL_FAST")
+    llm_model_fast: str = Field("nvidia/nemotron-3-super-120b-a12b:free", alias="LLM_MODEL_FAST")
     llm_model_fallback: str = Field(
         "nvidia/nemotron-3-super-120b-a12b:free", alias="LLM_MODEL_FALLBACK"
     )
