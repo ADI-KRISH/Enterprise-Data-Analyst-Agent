@@ -1,3 +1,11 @@
-# Allow-listed tables/columns in schema analytics. Populated in Phase 1.
+# Allow-listed tables/columns in schema analytics. The SQL validator rejects anything not listed here.
+# Keep in sync with database/schema.sql (tests/test_allowlist.py checks this).
 schema: analytics
-tables: {}
+tables:
+  dim_date: [date_key, date, day, month, month_name, quarter, year, fiscal_quarter, fiscal_year]
+  dim_region: [region_id, region_name, zone]
+  dim_store: [store_id, store_name, city, state, region_id]
+  dim_customer: [customer_id, name, segment, city, state, region_id, signup_date]
+  dim_product: [product_id, product_name, category, sub_category, brand, unit_cost, list_price]
+  fact_orders: [order_id, order_date, customer_id, store_id, channel, status]
+  fact_order_items: [order_item_id, order_id, product_id, quantity, unit_price, discount_pct, line_revenue, line_cost]
