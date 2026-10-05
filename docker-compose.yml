@@ -22,5 +22,47 @@ services:
       retries: 10
       start_period: 10s
 
+  # One-shot data seeding (admin credentials; the agent never uses these):
+  #   docker compose run --rm seed
+  seed:
+    build: .
+    profiles: ["tools"]
+    env_file: .env
+    environment:
+      DATABASE_URL_ADMIN: postgresql+psycopg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-analytics}
+      DATABASE_URL_RO: postgresql+psycopg://analyst_ro:${ANALYST_RO_PASSWORD}@db:5432/${POSTGRES_DB:-analytics}
+    command: ["python", "-m", "database.seed"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      DATABASE_URL_RO: postgresql+psycopg://analyst_ro:${ANALYST_RO_PASSWORD}@db:5432/${POSTGRES_DB:-analytics}
+      DATABASE_URL_ADMIN: ""
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+      - chroma:/app/.chroma
+    depends_on:
+      db:
+        condition: service_healthy
+
+  dashboard:
+    build: .
+    profiles: ["app"]
+    command: ["streamlit", "run", "dashboard/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+
 volumes:
+  chroma:
   pgdata:

@@ -24,7 +24,8 @@ Python 3.11 · LangGraph · LangChain (`langchain-openai` `ChatOpenAI` → OpenR
 
 ### LLM provider (OpenRouter, OpenAI-compatible) — `app/llm.py`
 - `ChatOpenAI(base_url="https://openrouter.ai/api/v1", temperature=0, timeout=LLM_TIMEOUT_S=60)`, key `OPENROUTER_API_KEY`.
-- `get_llm(kind: "strong" | "fast")`: `LLM_MODEL_STRONG` (default `nvidia/nemotron-3-ultra-550b-a55b:free`) / `LLM_MODEL_FAST` (default `qwen/qwen3.8-27b:free`), each `.with_fallbacks([LLM_MODEL_FALLBACK])` (default `nvidia/nemotron-3-super-120b-a12b:free`).
+- `get_llm(kind: "strong" | "fast")`: `LLM_MODEL_STRONG` (default `nvidia/nemotron-3-ultra-550b-a55b:free`) / `LLM_MODEL_FAST` (default `nvidia/nemotron-3.5-lightning:free`), each `.with_fallbacks([LLM_MODEL_FALLBACK])` (default `nvidia/nemotron-3-super-120b-a12b:free`).
+- Free-tier models can be slow (tens of seconds per call); `LLM_MODEL_*` in `.env` override the defaults.
 - Node tiers (`NODE_LLM_KIND`): planner, sql_generator → strong; understand, clarifier, responder → fast.
 - Reasoning: `extra_body={"reasoning": {"effort": "low", "exclude": True}}` so thinking never lands in content; `<think>` blocks are also stripped defensively.
 - HTTP 429 → exponential backoff with jitter, max 3 retries (then fallback). Client-level retries are disabled to avoid double retrying.
@@ -35,12 +36,12 @@ Python 3.11 · LangGraph · LangChain (`langchain-openai` `ChatOpenAI` → OpenR
 ```
 enterprise-data-analyst-agent/
 ├── app/            main.py (FastAPI), graph.py (LangGraph), state.py, config.py, llm.py, audit.py
-├── agents/         understand.py, planner.py, sql_generator.py, sql_validator.py,
+├── agents/         dates.py (relative-period resolution vs ANCHOR_DATE), understand.py, planner.py, sql_generator.py, sql_validator.py,
 │                   executor.py, verifier.py, responder.py, grounding.py, clarifier.py
 ├── retrieval/      docs/ (kpi_definitions.md, data_dictionary.md, reporting_policies.md),
 │                   build_index.py, retriever.py
 ├── database/       schema.sql, roles.sql, seed.py, allowlist.yaml
-├── analytics/      analysis.py (growth, share, top_n, period_compare, driver_breakdown)
+├── analytics/      analysis.py (growth, share, top_n, period_compare, driver_breakdown), formatting.py (INR lakh/crore, %)
 ├── visualization/  charts.py (returns Plotly JSON spec; chart choice from result shape + intent)
 ├── dashboard/      streamlit_app.py
 ├── eval/           questions.yaml (question + gold SQL), run_eval.py, results/
@@ -60,21 +61,21 @@ enterprise-data-analyst-agent/
 Seed: `database/seed.py`, fixed random seed, ~24 months, ~50k orders, INR amounts, realistic seasonality (Diwali/festive peaks). Inject documented, explainable patterns (e.g. South India revenue dip in the latest quarter driven by one category + a store closure) so "why" questions have real answers. Record every injected pattern in `database/SEED_NOTES.md` — it is synthetic data and README must say so.
 
 ## Agent state (app/state.py)
-question, intent, entities, metrics, filters, time_range, retrieved_context, plan, sql, validation_errors, sql_attempts (max 3), result_df (records + columns), verification, analysis, chart_spec, answer, grounded (bool), needs_clarification, clarification_question, trace (list of node events), timings.
+question, anchor_date, intent, entities, metrics, filters, time_range ({description,start,end,previous_start,previous_end}), ambiguities, retrieved_context, plan, sql, validation_errors, sql_attempts (max 3 per round), verify_retried, result_df (records + columns + truncated), verification, analysis, chart_spec, answer, answer_attempts, grounded (bool), grounding_issues, needs_clarification, clarification_question, error (set when a node fails or SQL attempts are exhausted; the API still returns a structured response), trace (list of node events; `operator.add` reducer, nodes return only new events), timings (ms per node + total).
 
 ## Graph
-understand → retrieve → (clarify? → END) → plan → generate_sql → validate ⟲ (on error, back to generate_sql with errors, max 3) → execute → verify ⟲ (empty/irrelevant → generate_sql once) → analyze → visualize → respond → grounding_check ⟲ (regenerate once) → END
+understand → retrieve → clarify (asks? → END) → plan → generate_sql → validate ⟲ (on error, back to generate_sql with errors, max 3) → execute → verify ⟲ (empty/irrelevant → generate_sql once, with a fresh attempt budget) → analyze → visualize → respond → grounding_check ⟲ (regenerate once) → END
 
 ## API contract
 `POST /analyze` {"question": str} → {"answer", "sql", "data", "columns", "visualization" (Plotly JSON or null), "analysis", "grounded", "needs_clarification", "clarification_question", "trace", "latency_ms"}
 Also `GET /health`, `GET /schema`. Every request is logged to `logs/audit.jsonl` (question, sql, validation result, row count, latency, grounded).
 
 ## Commands
-- `docker compose up -d db` → start Postgres (seeds on first run)
-- `python -m retrieval.build_index` → build vector index
+- `docker compose up -d db` → start Postgres (creates schema + `analyst_ro` role on first run); then `docker compose run --rm seed` (or `python -m database.seed`) to load the synthetic data
+- `python -m retrieval.build_index` → build vector index (optional; built lazily on first query). `RETRIEVAL_BACKEND=auto|vector|lexical`: `auto` falls back to lexical TF-IDF search when the fastembed model cannot be downloaded
 - `uvicorn app.main:app --reload` → API on :8000
 - `streamlit run dashboard/streamlit_app.py` → UI on :8501
-- `pytest -q` → tests
+- `pytest -q` → tests (DB-backed tests skip when Postgres isn't up and seeded)
 - `python -m eval.run_eval` → evaluation, writes `eval/results/<timestamp>.json`
 
 ## Working style for Claude Code

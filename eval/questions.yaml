@@ -1,2 +1,206 @@
-# Evaluation questions with gold SQL. Populated in Phase 6.
-questions: []
+# Evaluation questions with gold SQL (run on the read-only role). ANCHOR_DATE = 2026-09-30, so
+# "last quarter" = Q2 FY2027 (2026-07-01..2026-09-30), "this year" = FY2027 to date (2026-04-01..2026-09-30).
+# `clarify: true` means the agent should ask a clarification question instead of answering (no gold_sql).
+questions:
+  - id: q01_revenue_last_quarter
+    type: aggregation
+    question: What was total revenue last quarter?
+    gold_sql: |
+      SELECT SUM(i.line_revenue) AS revenue
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2026-07-01' AND DATE '2026-09-30'
+
+  - id: q02_revenue_last_fy
+    type: aggregation
+    question: What was total revenue last year?
+    gold_sql: |
+      SELECT SUM(i.line_revenue) AS revenue
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2025-04-01' AND DATE '2026-03-31'
+
+  - id: q03_orders_last_month
+    type: aggregation
+    question: How many completed orders did we have last month?
+    gold_sql: |
+      SELECT COUNT(DISTINCT order_id) AS orders FROM fact_orders
+      WHERE status = 'Completed' AND order_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-30'
+
+  - id: q04_top_categories
+    type: ranking
+    question: Top 5 product categories by revenue this year
+    gold_sql: |
+      SELECT p.category, SUM(i.line_revenue) AS revenue
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id JOIN dim_product p ON p.product_id = i.product_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2026-04-01' AND DATE '2026-09-30'
+      GROUP BY p.category ORDER BY revenue DESC LIMIT 5
+
+  - id: q05_revenue_by_region
+    type: breakdown
+    question: Show revenue by region for last quarter
+    gold_sql: |
+      SELECT r.region_name, SUM(i.line_revenue) AS revenue
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id
+      JOIN dim_customer c ON c.customer_id = o.customer_id JOIN dim_region r ON r.region_id = c.region_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2026-07-01' AND DATE '2026-09-30'
+      GROUP BY r.region_name ORDER BY revenue DESC
+
+  - id: q06_monthly_trend
+    type: trend
+    question: Show the monthly revenue trend for the last 6 months
+    gold_sql: |
+      SELECT TO_CHAR(DATE_TRUNC('month', o.order_date), 'YYYY-MM') AS month, SUM(i.line_revenue) AS revenue
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2026-04-01' AND DATE '2026-09-30'
+      GROUP BY 1 ORDER BY 1
+
+  - id: q07_aov_by_channel
+    type: breakdown
+    question: What is the average order value by channel last quarter?
+    gold_sql: |
+      SELECT o.channel, SUM(i.line_revenue) / COUNT(DISTINCT o.order_id) AS aov
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2026-07-01' AND DATE '2026-09-30'
+      GROUP BY o.channel
+
+  - id: q08_margin_by_category
+    type: breakdown
+    question: What is the gross margin percentage by product category last quarter?
+    gold_sql: |
+      SELECT p.category, (SUM(i.line_revenue) - SUM(i.line_cost)) / SUM(i.line_revenue) * 100 AS gross_margin_pct
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id JOIN dim_product p ON p.product_id = i.product_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2026-07-01' AND DATE '2026-09-30'
+      GROUP BY p.category
+
+  - id: q09_return_rate_by_category
+    type: breakdown
+    question: What is the return rate by product category across all data?
+    gold_sql: |
+      SELECT p.category,
+             COUNT(DISTINCT o.order_id) FILTER (WHERE o.status = 'Returned') * 100.0
+               / COUNT(DISTINCT o.order_id) FILTER (WHERE o.status IN ('Completed', 'Returned')) AS return_rate_pct
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id JOIN dim_product p ON p.product_id = i.product_id
+      GROUP BY p.category
+
+  - id: q10_top_customers
+    type: ranking
+    question: Who are the top 10 customers by revenue in the last 12 months?
+    gold_sql: |
+      SELECT c.name, SUM(i.line_revenue) AS revenue
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id JOIN dim_customer c ON c.customer_id = o.customer_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2025-10-01' AND DATE '2026-09-30'
+      GROUP BY c.customer_id, c.name ORDER BY revenue DESC LIMIT 10
+
+  - id: q11_online_share_by_region
+    type: breakdown
+    question: What is the online share of revenue by region this year?
+    gold_sql: |
+      SELECT r.region_name,
+             SUM(i.line_revenue) FILTER (WHERE o.channel = 'Online') * 100.0 / SUM(i.line_revenue) AS online_share_pct
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id
+      JOIN dim_customer c ON c.customer_id = o.customer_id JOIN dim_region r ON r.region_id = c.region_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2026-04-01' AND DATE '2026-09-30'
+      GROUP BY r.region_name
+
+  - id: q12_top_store
+    type: ranking
+    question: Which store had the highest revenue last quarter?
+    gold_sql: |
+      SELECT s.store_name, SUM(i.line_revenue) AS revenue
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id JOIN dim_store s ON s.store_id = o.store_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2026-07-01' AND DATE '2026-09-30'
+      GROUP BY s.store_name ORDER BY revenue DESC LIMIT 1
+
+  - id: q13_region_qoq
+    type: comparison
+    question: Compare revenue by region last quarter versus the quarter before
+    gold_sql: |
+      SELECT r.region_name,
+             SUM(i.line_revenue) FILTER (WHERE o.order_date BETWEEN DATE '2026-07-01' AND DATE '2026-09-30') AS current_revenue,
+             SUM(i.line_revenue) FILTER (WHERE o.order_date BETWEEN DATE '2026-04-01' AND DATE '2026-06-30') AS previous_revenue
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id
+      JOIN dim_customer c ON c.customer_id = o.customer_id JOIN dim_region r ON r.region_id = c.region_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2026-04-01' AND DATE '2026-09-30'
+      GROUP BY r.region_name
+
+  - id: q14_south_drivers
+    type: diagnostic
+    question: Which product categories drove the change in South India revenue last quarter versus the previous quarter?
+    gold_sql: |
+      SELECT p.category,
+             SUM(i.line_revenue) FILTER (WHERE o.order_date BETWEEN DATE '2026-07-01' AND DATE '2026-09-30') AS current_revenue,
+             SUM(i.line_revenue) FILTER (WHERE o.order_date BETWEEN DATE '2026-04-01' AND DATE '2026-06-30') AS previous_revenue
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id JOIN dim_product p ON p.product_id = i.product_id
+      JOIN dim_customer c ON c.customer_id = o.customer_id JOIN dim_region r ON r.region_id = c.region_id
+      WHERE o.status = 'Completed' AND r.region_name = 'South India' AND o.order_date BETWEEN DATE '2026-04-01' AND DATE '2026-09-30'
+      GROUP BY p.category
+
+  - id: q15_units_by_category
+    type: breakdown
+    question: How many units were sold per product category last quarter?
+    gold_sql: |
+      SELECT p.category, SUM(i.quantity) AS units_sold
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id JOIN dim_product p ON p.product_id = i.product_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2026-07-01' AND DATE '2026-09-30'
+      GROUP BY p.category
+
+  - id: q16_active_customers
+    type: aggregation
+    question: How many active customers did we have last quarter?
+    gold_sql: |
+      SELECT COUNT(DISTINCT customer_id) AS active_customers FROM fact_orders
+      WHERE status = 'Completed' AND order_date BETWEEN DATE '2026-07-01' AND DATE '2026-09-30'
+
+  - id: q17_revenue_by_segment
+    type: breakdown
+    question: Revenue by customer segment this year
+    gold_sql: |
+      SELECT c.segment, SUM(i.line_revenue) AS revenue
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id JOIN dim_customer c ON c.customer_id = o.customer_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2026-04-01' AND DATE '2026-09-30'
+      GROUP BY c.segment
+
+  - id: q18_cancellation_by_channel
+    type: breakdown
+    question: What is the cancellation rate by channel across all data?
+    gold_sql: |
+      SELECT channel, COUNT(*) FILTER (WHERE status = 'Cancelled') * 100.0 / COUNT(*) AS cancellation_rate_pct
+      FROM fact_orders GROUP BY channel
+
+  - id: q19_orders_per_month_fy26
+    type: trend
+    question: How many completed orders per month in the last fiscal year?
+    gold_sql: |
+      SELECT TO_CHAR(DATE_TRUNC('month', order_date), 'YYYY-MM') AS month, COUNT(*) AS orders
+      FROM fact_orders WHERE status = 'Completed' AND order_date BETWEEN DATE '2025-04-01' AND DATE '2026-03-31'
+      GROUP BY 1 ORDER BY 1
+
+  - id: q20_gross_profit_by_region
+    type: breakdown
+    question: Gross profit by region last quarter
+    gold_sql: |
+      SELECT r.region_name, SUM(i.line_revenue - i.line_cost) AS gross_profit
+      FROM fact_orders o JOIN fact_order_items i ON i.order_id = o.order_id
+      JOIN dim_customer c ON c.customer_id = o.customer_id JOIN dim_region r ON r.region_id = c.region_id
+      WHERE o.status = 'Completed' AND o.order_date BETWEEN DATE '2026-07-01' AND DATE '2026-09-30'
+      GROUP BY r.region_name
+
+  # ---- must ask for clarification (metric / entity not defined by the data or KPI docs)
+  - id: c01_churn
+    type: clarify
+    clarify: true
+    question: What is our customer churn rate?
+
+  - id: c02_best_store
+    type: clarify
+    clarify: true
+    question: Which is our best store?
+
+  - id: c03_satisfaction
+    type: clarify
+    clarify: true
+    question: How satisfied are our customers in Mumbai?
+
+  - id: c04_out_of_scope
+    type: clarify
+    clarify: true
+    question: What will the weather be like in Delhi next week?

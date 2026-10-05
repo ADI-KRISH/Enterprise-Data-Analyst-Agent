@@ -142,4 +142,4 @@ def test_get_llm_wiring(env):
     assert primary.extra_body == {"reasoning": {"effort": "low", "exclude": True}}
     assert primary_kwargs["response_format"] == fallback_kwargs["response_format"] == {"type": "json_object"}
     fast, fast_kwargs = _unwrap(get_llm("fast").runnable)
-    assert fast.model_name == "qwen/qwen3.8-27b:free" and "response_format" not in fast_kwargs
+    assert fast.model_name == "nvidia/nemotron-3.5-lightning:free" and "response_format" not in fast_kwargs
