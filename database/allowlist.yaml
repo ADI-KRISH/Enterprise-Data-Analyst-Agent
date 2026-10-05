@@ -1,3 +1,70 @@
-# Allow-listed tables/columns in schema analytics. Populated in Phase 1.
+# Allow-listed tables/columns in schema analytics (generated from information_schema; keep in sync with schema.sql).
 schema: analytics
-tables: {}
+tables:
+  dim_customer:
+    columns:
+      customer_id: integer
+      name: text
+      segment: text
+      city: text
+      state: text
+      region_id: integer
+      signup_date: date
+  dim_date:
+    columns:
+      date_key: integer
+      date: date
+      day: smallint
+      month: smallint
+      month_name: text
+      quarter: smallint
+      year: smallint
+      fiscal_quarter: smallint
+      fiscal_year: smallint
+  dim_product:
+    columns:
+      product_id: integer
+      product_name: text
+      category: text
+      sub_category: text
+      brand: text
+      unit_cost: numeric
+      list_price: numeric
+  dim_region:
+    columns:
+      region_id: integer
+      region_name: text
+      zone: text
+  dim_store:
+    columns:
+      store_id: integer
+      store_name: text
+      city: text
+      state: text
+      region_id: integer
+  fact_order_items:
+    columns:
+      order_item_id: integer
+      order_id: integer
+      product_id: integer
+      quantity: integer
+      unit_price: numeric
+      discount_pct: numeric
+      line_revenue: numeric
+      line_cost: numeric
+  fact_orders:
+    columns:
+      order_id: integer
+      order_date: date
+      customer_id: integer
+      store_id: integer
+      channel: text
+      status: text
+joins:
+- fact_order_items.order_id = fact_orders.order_id
+- fact_order_items.product_id = dim_product.product_id
+- fact_orders.customer_id = dim_customer.customer_id
+- fact_orders.store_id = dim_store.store_id
+- fact_orders.order_date = dim_date.date
+- dim_customer.region_id = dim_region.region_id
+- dim_store.region_id = dim_region.region_id
