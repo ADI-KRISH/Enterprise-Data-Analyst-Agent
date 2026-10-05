@@ -83,3 +83,12 @@ Also `GET /health`, `GET /schema`. Every request is logged to `logs/audit.jsonl`
 - Prefer small, typed, testable functions. Pydantic models for LLM structured outputs (JSON mode + `app.llm.invoke_structured`, not `with_structured_output`).
 - Keep secrets in `.env` (never commit). Provide `.env.example`.
 - If something in this file becomes untrue, update this file in the same commit.
+
+## Status / next steps (handoff between sessions)
+Built and tested offline (pytest, scripted fake LLM): all phases through dashboard, eval set, Docker, README.
+**Never exercised:** real LLM calls, `eval/run_eval.py`, `fastembed` model download, `docker compose up`.
+Next, in a session whose environment has `OPENROUTER_API_KEY` set and network access to `openrouter.ai`, `huggingface.co` and `cas-server.xethub.hf.co`:
+1. Start Postgres 16 (docker compose, or local `initdb`), create `admin` + `analyst_ro` (`psql -v ro_pw=... -f database/roles.sql`), `.env` from `.env.example`, `python -m database.seed`.
+2. Verify `EMBEDDER=fastembed python -m retrieval.build_index` works (drop the offline hash fallback assumption).
+3. `pytest -q`, then `python -m eval.run_eval`; fix prompt/agent failures; keep results in `eval/results/` only (rule 5). Consider a paid `LLM_MODEL_STRONG` if free models fail.
+4. Only then add measured figures to README. No PR has been opened.
