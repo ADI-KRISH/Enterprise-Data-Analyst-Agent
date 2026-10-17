@@ -41,6 +41,7 @@ def fake_llm(*contents: str, model: str = "vendor/model-x"):
 def env(monkeypatch):
     monkeypatch.setenv("DATABASE_URL_RO", "postgresql+psycopg://ro:x@localhost/db")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
     llm_mod.get_settings.cache_clear()
     yield
     llm_mod.get_settings.cache_clear()
@@ -143,3 +144,13 @@ def test_get_llm_wiring(env):
     assert primary_kwargs["response_format"] == fallback_kwargs["response_format"] == {"type": "json_object"}
     fast, fast_kwargs = _unwrap(get_llm("fast").runnable)
     assert fast.model_name == "qwen/qwen3.8-27b:free" and "response_format" not in fast_kwargs
+
+
+def test_openai_provider_wiring(env, monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-openai")
+    llm_mod.get_settings.cache_clear()
+    primary, _ = _unwrap(get_llm("strong").runnable)
+    fast, _ = _unwrap(get_llm("fast").runnable)
+    assert primary.model_name == "gpt-4o" and fast.model_name == "gpt-4o-mini"
+    assert primary.openai_api_base is None and not primary.extra_body
