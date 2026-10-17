@@ -52,6 +52,12 @@ class StructuredOutputError(RuntimeError):
 
 
 def _chat_model(model: str, settings: Settings) -> ChatOpenAI:
+    if settings.provider == "openai":
+        if settings.openai_api_key is None:
+            raise RuntimeError("OPENAI_API_KEY is not set")
+        # OpenAI direct: no OpenRouter-only `reasoning` body, default base URL.
+        return ChatOpenAI(model=model, api_key=settings.openai_api_key, temperature=0,
+                          timeout=settings.llm_timeout_s, max_retries=0)
     if settings.openrouter_api_key is None:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
     return ChatOpenAI(
@@ -77,7 +83,12 @@ def _with_rate_limit_retry(runnable: Runnable) -> Runnable:
 def get_llm(kind: LLMKind, *, json_mode: bool = False) -> Runnable:
     """Primary model for `kind`, with 429 backoff, falling back to LLM_MODEL_FALLBACK."""
     settings = get_settings()
-    primary = {"strong": settings.llm_model_strong, "fast": settings.llm_model_fast}[kind]
+    if settings.provider == "openai":
+        primary = {"strong": settings.openai_model_strong, "fast": settings.openai_model_fast}[kind]
+        fallback = settings.openai_model_strong
+    else:
+        primary = {"strong": settings.llm_model_strong, "fast": settings.llm_model_fast}[kind]
+        fallback = settings.llm_model_fallback
 
     def build(model: str) -> Runnable:
         chat: Runnable = _chat_model(model, settings)
@@ -85,7 +96,7 @@ def get_llm(kind: LLMKind, *, json_mode: bool = False) -> Runnable:
             chat = chat.bind(response_format=_JSON_MODE)
         return _with_rate_limit_retry(chat)
 
-    return build(primary).with_fallbacks([build(settings.llm_model_fallback)])
+    return build(primary).with_fallbacks([build(fallback)])
 
 
 def get_llm_for_node(node: str, *, json_mode: bool = False) -> Runnable:

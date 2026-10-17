@@ -36,7 +36,7 @@ def _secret_values() -> list[str]:
     except Exception:  # noqa: BLE001 - redaction must never fail because config is absent
         return []
     values = []
-    for secret in (s.openrouter_api_key, s.database_url_ro, s.database_url_admin):
+    for secret in (s.openrouter_api_key, s.openai_api_key, s.database_url_ro, s.database_url_admin):
         if secret is None:
             continue
         raw = secret.get_secret_value()
