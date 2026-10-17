@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     # Re-check against the eval gold queries (Phase 6).
     max_query_cost: float = Field(100_000.0, gt=0, alias="MAX_QUERY_COST")
     statement_timeout_ms: int = Field(15_000, ge=1, le=15_000, alias="STATEMENT_TIMEOUT_MS")
+    # API (CLAUDE.md Security model §6)
+    api_key: SecretStr | None = Field(None, alias="API_KEY")
+    rate_limit_per_min: int = Field(30, ge=1, alias="RATE_LIMIT_PER_MIN")
+    max_question_chars: int = Field(500, ge=1, alias="MAX_QUESTION_CHARS")
+    request_timeout_s: float = Field(180.0, gt=0, alias="REQUEST_TIMEOUT_S")
     audit_log_path: Path = Field(PROJECT_ROOT / "logs" / "audit.jsonl", alias="AUDIT_LOG_PATH")
 
 

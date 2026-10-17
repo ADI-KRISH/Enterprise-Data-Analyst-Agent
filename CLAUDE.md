@@ -26,7 +26,7 @@ An AI analytics agent: natural-language business question → intent/plan → sc
    - **Function allowlist, not a blocklist.** Any function not on the list is rejected. Default list (kept as a frozenset in the validator): aggregates (`count`, `sum`, `avg`, `min`, `max`, `stddev`, `percentile_cont`), date (`date_trunc`, `extract`, `date_part`, `to_char`, `make_date`), math (`round`, `abs`, `ceil`, `floor`, `greatest`, `least`, `nullif`), string basics (`lower`, `upper`, `trim`, `length`, `concat`, `substring`), `CASE`, `COALESCE`, `CAST`, and window functions (`row_number`, `rank`, `dense_rank`, `lag`, `lead`, `ntile`, `first_value`, `last_value`, aggregates with `OVER`). Clock functions (`now`, `current_date`, …) are excluded because relative dates resolve against `ANCHOR_DATE` (rule 6).
    - **Schema allowlist.** Tables may only be `analytics.<allow-listed table>`, an unqualified allow-listed table, or a CTE defined in the same query. Reject `pg_catalog`, `information_schema`, `public`, and any other schema; reject system columns (`ctid`, `xmin`, …) via the column allowlist.
    - **Rejected constructs:** `FOR UPDATE` / `FOR SHARE` (any locking clause), `SELECT … INTO`, `SET`, `SHOW`, `LISTEN`, `NOTIFY`, `UNLISTEN`, `dblink*`, `lo_*`, `COPY`, `DO`.
-   - **Cost cap.** Reject the query if the `EXPLAIN` total cost exceeds `MAX_QUERY_COST` (config, default 100000). Calibrated in Phase 3 from the KPI reference queries in `kpi_definitions.md` (cost 2.2k–14.7k; cartesian joins cost 0.5M–122M); re-check against the eval gold queries in Phase 6.
+   - **Cost cap.** Reject the query if the `EXPLAIN` total cost exceeds `MAX_QUERY_COST` (config, default 100000). Calibrated in Phase 3 from the KPI reference queries in `kpi_definitions.md` (cost 2.2k–14.7k; cartesian joins cost 0.5M–122M); re-checked in Phase 6: the eval gold queries cost 0.1k–14.7k, all under the cap (`tests/test_eval.py`).
    - **Row cap.** A missing or non-literal `LIMIT` becomes `DEFAULT_ROW_LIMIT` (1000); a larger `LIMIT` is clamped to `MAX_RESULT_ROWS` (config, default 5000); `FETCH FIRST n` becomes `LIMIT n`. The executor also fetches at most `MAX_RESULT_ROWS` rows.
    - **Execute what was validated.** `validate()` returns SQL regenerated from the checked, column-qualified syntax tree (comments dropped). The executor runs only that text, re-validating it first, via a raw DBAPI cursor with no parameters, so `%` and `:` inside literals are never treated as placeholders. `validate()` never raises; any internal failure, including RecursionError, is a rejection.
    - **Also rejected:** recursive CTEs, whole-row references (`SELECT c FROM dim_customer c`), schema-qualified function calls, `$n` placeholders, and casts outside a small type allowlist (e.g. `::regclass`, `::json`).
@@ -160,9 +160,10 @@ Also `GET /health` (no auth) and `GET /schema` (auth; serves the allow-listed ta
 - `python -m database.seed` → load deterministic synthetic data (admin URL; truncates and reloads)
 - `python -m retrieval.data_dictionary` → regenerate `retrieval/docs/data_dictionary.{json,md}` from the live DB (as `analyst_ro`; meanings from `retrieval/column_notes.yaml`); rerun after schema/seed changes
 - `python -m retrieval.build_index` → build vector index (chunks docs by `##` heading; fastembed `EMBED_MODEL` downloaded once into `EMBED_CACHE_DIR`)
-- `uvicorn app.main:app --reload` → API on :8000
+- `uvicorn app.main:app --reload` → API on :8000 (needs `API_KEY` in `.env`; also `RATE_LIMIT_PER_MIN`, `MAX_QUESTION_CHARS`, `REQUEST_TIMEOUT_S`)
 - `streamlit run dashboard/streamlit_app.py` → UI on :8501
 - `python -m app.cli "total revenue last quarter"` → run the graph once from the terminal
+- `docker compose up -d` → db + api + dashboard
 - `pytest -q` → tests
 - `python -m eval.run_eval` → evaluation, writes `eval/results/<timestamp>.json`
 
