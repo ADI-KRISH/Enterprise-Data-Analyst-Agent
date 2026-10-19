@@ -11,6 +11,11 @@ Natural-language business question → intent/plan → schema + KPI retrieval (R
 - **Relative dates** ("last quarter") resolve against `ANCHOR_DATE = max(order_date)` (2026-09-30), not the system clock ([`reporting_policies.md`](retrieval/docs/reporting_policies.md)).
 - Errors returned to users are generic plus a `request_id`; details go to `logs/audit.jsonl`.
 
+## Workflow
+![Agentic workflow](images/agent_workflow.png)
+
+(Regenerate with `python images/draw_workflow.py`.)
+
 ## Setup
 Requires Python 3.11 and Docker.
 
