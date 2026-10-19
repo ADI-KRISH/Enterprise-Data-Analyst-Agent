@@ -233,3 +233,15 @@ def test_sql_batch_accepts_bare_shapes(payload):
     from agents.sql_generator import SQLBatch
 
     assert SQLBatch.model_validate(payload).queries[0].sql == "SELECT 1"
+
+
+def test_money_display_is_grounded():
+    from agents.responder import add_money_display, format_inr
+
+    assert format_inr(4099557.15) == "₹41.0 L" and format_inr(13769876) == "₹1.38 Cr" and format_inr(-5200) == "-₹5,200"
+    a = add_money_display({"total_change": -4099557.15, "pct": 29.8, "rows": [{"curr": 9670318.85}]})
+    assert a["total_change_display"] == "-₹41.0 L" and a["rows"][0]["curr_display"] == "₹96.7 L"
+    assert "pct_display" not in a
+    g = grounding.check("Revenue fell ₹41.0 L (29.8%) to ₹96.7 L.", [], {"total_change": -4099557.15, "pct": 29.8,
+                                                                         "x": 9670318.85}, "q")
+    assert g.grounded

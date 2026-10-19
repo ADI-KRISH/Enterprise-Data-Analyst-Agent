@@ -54,3 +54,11 @@ python -m eval.run_eval   # needs a working OPENROUTER_API_KEY; writes eval/resu
 
 ## Layout
 `app/` FastAPI + LangGraph + LLM client · `agents/` graph nodes, validator, executor, guards · `retrieval/` KPI/policy docs, data dictionary, vector index · `database/` schema, roles, seed, allow-list · `analytics/` Pandas analysis · `visualization/` Plotly specs built by our code · `dashboard/` Streamlit · `eval/` · `tests/`.
+
+## Demo
+With the API and dashboard running (`docker compose up -d`, or the two commands above), run the scripted walkthrough:
+
+```bash
+python -m demo.run_demo     # health/auth/size checks, KPI, breakdown+chart, ranking, trend, "why" diagnosis, borderline and guardrail cases
+```
+Or open the dashboard at http://localhost:8501 and click an example question. Data is synthetic; LLM latency varies by provider.
